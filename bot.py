@@ -302,4 +302,4 @@ async def end_loa(ctx, member: discord.Member):
     else:
         await ctx.send("Member doesn't have LOA role.")
 
-bot.run('DISCORD_TOKEN')
+bot.run(os.getenv('DISCORD_TOKEN'))
