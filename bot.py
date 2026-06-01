@@ -115,7 +115,7 @@ class AdminApprovalView(discord.ui.View):
         super().__init__(timeout=None)
         self.member_id = member_id
         self.data_form = data_form
-    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa")
+    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_rail")
     async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         guild = interaction.guild
@@ -134,7 +134,7 @@ class AdminApprovalView(discord.ui.View):
             loa_data[str(self.member_id)] = {"username": self.data_form["username"], "end_date": self.data_form["end_date"]}
             save_loa_data(loa_data)
 
-    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa")
+    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_rail")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         for child in self.children: child.disabled = True
         await interaction.response.send_modal(RejectReasonModal(member_id=self.member_id, interaction_admin=interaction, view_approval=self))
@@ -160,7 +160,7 @@ class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
 
 class LOAButtonView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
-    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa")
+    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_rail")
     async def create_loa_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not loa_system_active: return await interaction.response.send_message("The LOA system has been temporarily disabled.", ephemeral=True)
         await interaction.response.send_modal(LOAForm())
@@ -356,7 +356,7 @@ async def start_session_planner(ctx):
     
     class TriggerView(discord.ui.View):
         def __init__(self): super().__init__(timeout=60)
-        @discord.ui.button(label="Click to Open Session Form", style=discord.ButtonStyle.secondary, custom_id="btn_open_session_reg")
+        @discord.ui.button(label="Click to Open Session Form", style=discord.ButtonStyle.secondary, custom_id="btn_open_session_railway")
         async def open_form(self, interaction: discord.Interaction, button: discord.ui.Button):
             if interaction.user.id != ctx.author.id:
                 return await interaction.response.send_message("Access denied.", ephemeral=True)
@@ -399,4 +399,8 @@ async def on_ready():
     if not scheduler.running: scheduler.start()
     print(f"System Active! {bot.user} is operational.")
 
-bot.run(os.getenv('DISCORD_TOKEN'))
+token = os.getenv('DISCORD_TOKEN')
+if token:
+    bot.run(token)
+else:
+    print("ERROR: DISCORD_TOKEN variable is completely missing from Railway dashboard configuration.")
