@@ -35,7 +35,6 @@ DATA_FILE = "loa_data.json"
 
 ID_CHANNEL_ANNOUNCEMENT = 1400173631421546620 
 
-# ID Target Channel Pengumuman STRICT RP Terpilih
 SERVER_CHANNELS = {
     "1": 1351207506612846638,
     "2": 1351210046599462945,
@@ -168,7 +167,7 @@ class LOAButtonView(discord.ui.View):
 
 
 # ====================================================================
-# STABLE & FIXED: INTEGRATED SINGLE-PAGE ROLEPLAY PLANNER MODAL
+# SINGLE-PAGE UNIFIED ROLEPLAY PLANNER MODAL (STABLE)
 # ====================================================================
 
 async def send_automated_strict_rp_template(target_channel_id, host_name, map_author, aorp_loc, server_code):
@@ -231,7 +230,7 @@ async def send_automated_strict_rp_template(target_channel_id, host_name, map_au
 class UnifiedSessionPlannerModal(discord.ui.Modal, title="Create Roleplay Session"):
     field_identities = discord.ui.TextInput(
         label="1 & 2. Host & Map Author Details",
-        placeholder="Host Name: ...\nMap Author Name: ...",
+        placeholder="Host Name: PRES | Doctor_BYP\nMap Author Name: ...",
         style=discord.TextStyle.long,
         required=True
     )
@@ -249,7 +248,7 @@ class UnifiedSessionPlannerModal(discord.ui.Modal, title="Create Roleplay Sessio
     )
     field_tech_details = discord.ui.TextInput(
         label="5 & 6. Staff Join Time & Server Code",
-        placeholder="Staff Join Time (Format HH.MM): 20.30\nServer Code: [Masukan Kode Di Sini]",
+        placeholder="Staff Join Time (Format HH.MM): 20.30\nServer Code: rcrp-test-code",
         style=discord.TextStyle.long,
         required=True
     )
@@ -263,8 +262,7 @@ class UnifiedSessionPlannerModal(discord.ui.Modal, title="Create Roleplay Sessio
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
-        # --- PARSING DATA SECARA INTERAL ---
-        # 1. Ekstraksi Host & Map Author
+        # Parse Host & Map Author
         id_lines = [line.strip() for line in self.field_identities.value.split('\n') if line.strip()]
         host_name = "Staff RCRP"
         map_author = "Staff RCRP"
@@ -274,7 +272,7 @@ class UnifiedSessionPlannerModal(discord.ui.Modal, title="Create Roleplay Sessio
             elif "map" in line.lower():
                 map_author = line.split(':', 1)[-1].strip()
 
-        # 2. Ekstraksi Staff Time & Server Code
+        # Parse Tech Details
         tech_lines = [line.strip() for line in self.field_tech_details.value.split('\n') if line.strip()]
         staff_time_str = "20.30"
         server_code = "PRIVATE-SERVER"
@@ -284,7 +282,7 @@ class UnifiedSessionPlannerModal(discord.ui.Modal, title="Create Roleplay Sessio
             elif "code" in line.lower() or "server" in line.lower():
                 server_code = line.split(':', 1)[-1].strip()
 
-        # 3. Ekstraksi AORP & Target Channel
+        # Parse Venue & Target Channel
         venue_lines = [line.strip() for line in self.field_venue_channel.value.split('\n') if line.strip()]
         aorp_location = "LOC"
         selected_server = "1"
@@ -294,18 +292,15 @@ class UnifiedSessionPlannerModal(discord.ui.Modal, title="Create Roleplay Sessio
             elif "channel" in line.lower() or "target" in line.lower() or "server" in line.lower():
                 selected_server = "".join(filter(str.isdigit, line.split(':', 1)[-1].strip()))
 
-        # --- VALIDASI INPUT ---
         if selected_server not in SERVER_CHANNELS:
-            return await interaction.followup.send("Setup failed. Server channel detection must resolve to 1, 2, or 3.", ephemeral=True)
+            return await interaction.followup.send("Setup failed. Server channel must be 1, 2, or 3.", ephemeral=True)
 
         try:
-            # Ambil angka jam menit dari teks input format HH.MM
             time_clean = "".join([c for c in staff_time_str if c.isdigit() or c == '.'])
             hour, minute = map(int, time_clean.split('.'))
         except Exception:
-            return await interaction.followup.send("Setup failed. Please make sure the Staff Join Time uses the HH.MM format.", ephemeral=True)
+            return await interaction.followup.send("Setup failed. Staff Join Time must follow HH.MM format.", ephemeral=True)
 
-        # --- DISTRIBUSI PENGUMUMAN & PENJADWALAN ---
         announcement_text = (
             f"__**Rise Country**__\n"
             f" \n"
@@ -339,8 +334,10 @@ class UnifiedSessionPlannerModal(discord.ui.Modal, title="Create Roleplay Sessio
                 args=[chosen_channel_id, host_name, map_author, aorp_location, server_code],
                 id=f"strict_job_{interaction.id}"
             )
-            
-            await interaction.message.delete() # Hapus tombol pemicu awal agar rapi
+            try:
+                await interaction.message.delete()
+            except Exception:
+                pass
             await interaction.followup.send(f"Success! Schedule created and template automated for Server {selected_server}.", ephemeral=True)
         else:
             await interaction.followup.send("Error. Main announcement channel not found.", ephemeral=True)
@@ -359,7 +356,7 @@ async def start_session_planner(ctx):
     
     class TriggerView(discord.ui.View):
         def __init__(self): super().__init__(timeout=60)
-        @discord.ui.button(label="Click to Open Session Form", style=discord.ButtonStyle.secondary)
+        @discord.ui.button(label="Click to Open Session Form", style=discord.ButtonStyle.secondary, custom_id="btn_open_session_reg")
         async def open_form(self, interaction: discord.Interaction, button: discord.ui.Button):
             if interaction.user.id != ctx.author.id:
                 return await interaction.response.send_message("Access denied.", ephemeral=True)
