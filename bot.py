@@ -116,7 +116,7 @@ class AdminApprovalView(discord.ui.View):
         super().__init__(timeout=None)
         self.member_id = member_id
         self.data_form = data_form
-    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_v6")
+    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_v8")
     async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         guild = interaction.guild
@@ -135,7 +135,7 @@ class AdminApprovalView(discord.ui.View):
             loa_data[str(self.member_id)] = {"username": self.data_form["username"], "end_date": self.data_form["end_date"]}
             save_loa_data(loa_data)
 
-    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_v6")
+    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_v8")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         for child in self.children: child.disabled = True
         await interaction.response.send_modal(RejectReasonModal(member_id=self.member_id, interaction_admin=interaction, view_approval=self))
@@ -161,20 +161,20 @@ class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
 
 class LOAButtonView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
-    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_v6")
+    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_v8")
     async def create_loa_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not loa_system_active: return await interaction.response.send_message("The LOA system has been temporarily disabled.", ephemeral=True)
         await interaction.response.send_modal(LOAForm())
 
 
 # ====================================================================
-# TWO-PAGE PROFESSIONAL ROLEPLAY SESSION PLANNER
+# TWO-PAGE PROFESSIONAL ROLEPLAY SESSION PLANNER WITH STAFF JOIN SCHEDULER
 # ====================================================================
 
 async def send_automated_strict_rp_template(target_channel_id, host_name, map_author, aorp_loc, server_code):
     channel = bot.get_channel(target_channel_id)
     if channel:
-        # PERBAIKAN UTAMA: Struktur string dipecah secara linear agar aman dari pemotongan API Discord
+        # Perbaikan struktur string linear untuk memastikan data terbaca utuh tanpa terpotong API Discord
         template = (
             f"# **RiseCountry 🔴 STRICT RP**\n"
             f"**AORP : {aorp_loc}**\n"
@@ -266,6 +266,7 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Technical & Venu
         if selected_server not in SERVER_CHANNELS:
             return await interaction.followup.send("❌ Submission aborted. Target Channel must be 1, 2, or 3.", ephemeral=True)
 
+        # Mengambil jam Staff Join Time untuk eksekusi Scheduler otomatis
         staff_time_raw = self.f_staff_join.value.strip().replace(":", ".")
         try:
             time_clean = "".join([c for c in staff_time_raw if c.isdigit() or c == '.'])
@@ -273,6 +274,7 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Technical & Venu
         except Exception:
             return await interaction.followup.send("❌ Submission aborted. Staff Join Time must follow the HH.MM format.", ephemeral=True)
 
+        # Mencari jam "Open Server" secara otomatis dari jadwal Halaman 1
         open_server_time = staff_time_raw  
         match = re.search(r'(?:open\s+server|open)\s*:\s*([\d[:\.]+)', self.cached_data['schedules'].lower())
         if match:
@@ -304,13 +306,14 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Technical & Venu
             await announcement_channel.send(announcement_text)
             chosen_channel_id = SERVER_CHANNELS[selected_server]
 
+            # PENJADWALAN KEMBALI KE JAM STAFF JOIN TIME Sesuai Koreksi Anda
             scheduler.add_job(
                 send_automated_strict_rp_template,
                 'cron',
                 hour=hour,
                 minute=minute,
                 args=[chosen_channel_id, self.cached_data['host'], self.cached_data['map_author'], self.f_aorp.value.strip(), self.f_code.value.strip()],
-                id=f"strict_job_v6_{interaction.id}"
+                id=f"strict_job_v8_{interaction.id}"
             )
             
             try:
@@ -322,7 +325,7 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Technical & Venu
                 title="✨ Session Created Successfully!",
                 description=(
                     f"• Announcement posted in main channel.\n"
-                    f"• Strict RP template scheduled for automated delivery to **Server {selected_server}** at **{staff_time_raw}**."
+                    f"• Strict RP template scheduled for automated delivery to **Server {selected_server}** at **{staff_time_raw}** (Staff Join Time)."
                 ),
                 color=discord.Color(0x0d50b8)
             )
@@ -351,7 +354,7 @@ class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Identity & Sched
     )
     f_schedules = discord.ui.TextInput(
         label="4. Schedule Milestones",
-        placeholder="Open Server: 21.00\nSTS: 21.05\nRoleplay Start: 21.10",
+        placeholder="Open Server: 21.15\nSTS: 21.20\nRoleplay Start: 21.25",
         style=discord.TextStyle.long,
         required=True
     )
@@ -380,7 +383,7 @@ class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Identity & Sched
         class TransitionView(discord.ui.View):
             def __init__(self):
                 super().__init__(timeout=60)
-            @discord.ui.button(label="Proceed to Page 2", style=discord.ButtonStyle.secondary, custom_id="btn_goto_p2_v6")
+            @discord.ui.button(label="Proceed to Page 2", style=discord.ButtonStyle.secondary, custom_id="btn_goto_p2_v8")
             async def go_page2(self, inner_interaction: discord.Interaction, button: discord.ui.Button):
                 await inner_interaction.response.send_modal(SessionPlannerPage2Modal(cached_data=cached_data))
 
@@ -403,7 +406,7 @@ async def start_session_planner(ctx):
     class WizardTriggerView(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=60)
-        @discord.ui.button(label="Create Session Plan", style=discord.ButtonStyle.secondary, custom_id="btn_trigger_p1_v6")
+        @discord.ui.button(label="Create Session Plan", style=discord.ButtonStyle.secondary, custom_id="btn_trigger_p1_v8")
         async def open_p1(self, interaction: discord.Interaction, button: discord.ui.Button):
             if interaction.user.id != ctx.author.id:
                 return await interaction.response.send_message("Authorization denied.", ephemeral=True)
