@@ -2,7 +2,9 @@ import discord
 from discord.ext import commands, tasks
 import json
 import os
-from datetime import datetime
+from datetime import datetime, time
+# Memakai APScheduler untuk trigger alarm pengiriman kode server secara presisi berdasarkan jam:menit
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -11,6 +13,9 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# Inisialisasi scheduler global
+scheduler = AsyncIOScheduler()
+
 # ====================================================================
 # CONFIGURATION
 # ====================================================================
@@ -18,6 +23,16 @@ ID_CHANNEL_LOG_LOA = 1510642659776266442  # Ganti dengan ID Channel Admin kamu
 ID_ROLE_LOA = 1469270847905730590         # Ganti dengan ID Role LOA kamu
 GUILD_ID = 1351182942625337378            # Ganti dengan ID Server (Guild) kamu
 DATA_FILE = "loa_data.json"
+
+# ID Khusus untuk Fitur Pengumuman Session Roleplay
+ID_ROLE_PEMERINTAH = 1508831415461220423  # Tag Pemerintah sesuai permintaan
+ID_CHANNEL_ANNOUNCEMENT = 1351182942625337378 # Ganti dengan ID channel tempat pengumuman jadwal dikirim
+
+# Role yang diizinkan menggunakan !setsession (Ganti atau tambah sesuai kebutuhan servermu)
+ALLOWED_ROLE_SESSION_IDS = [
+    1508831415461220423, # Contoh: Role Pemerintah
+    # Kamu bisa menambahkan ID role panitia/staf lainnya di sini dipisahkan koma
+]
 
 # ====================================================================
 # SAKELAR SISTEM LOA (GLOBAL STATE)
@@ -57,16 +72,10 @@ async def check_expired_loa():
     loa_data = load_loa_data()
     now = datetime.now()
     updated = False
-    
-    # List untuk menampung ID yang sudah kedaluwarsa
-    expired_members = []
 
     for member_id_str, details in list(loa_data.items()):
         try:
-            # Parse tanggal selesai (Format: DD/MM/YYYY)
             end_date = datetime.strptime(details["end_date"], "%d/%m/%Y")
-            
-            # Jika hari ini sudah melewati tanggal selesai LOA
             if now.date() > end_date.date():
                 member_id = int(member_id_str)
                 member = guild.get_member(member_id)
@@ -74,7 +83,6 @@ async def check_expired_loa():
                 if member and role_loa in member.roles:
                     try:
                         await member.remove_roles(role_loa)
-                        # Kirim DM Otomatis ke member
                         embed_dm = discord.Embed(
                             title="Notice of LOA Termination",
                             description=f"Hello {member.mention},\n\nThis is an official automated notification to inform you that your Leave of Absence (LOA) period has concluded. Your LOA role has been removed, and you are expected to resume your standard duties and responsibilities.",
@@ -85,7 +93,6 @@ async def check_expired_loa():
                     except Exception as e:
                         print(f"Failed to remove role or DM member {member_id}: {e}")
                 
-                # Kirim log ke channel admin bahwa LOA telah selesai otomatis
                 log_channel = bot.get_channel(ID_CHANNEL_LOG_LOA)
                 if log_channel:
                     await log_channel.send(f"Automated System: LOA period has concluded for <@{member_id_str}>. Role removed.")
@@ -93,7 +100,6 @@ async def check_expired_loa():
                 del loa_data[member_id_str]
                 updated = True
         except ValueError:
-            # Jika format tanggal salah di database, abaikan agar tidak crash
             continue
 
     if updated:
@@ -154,7 +160,6 @@ class AdminApprovalView(discord.ui.View):
     @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa")
     async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
-        
         guild = interaction.guild
         member = guild.get_member(self.member_id)
         
@@ -176,7 +181,6 @@ class AdminApprovalView(discord.ui.View):
                 except discord.Forbidden:
                     print("Bot lacks permissions to assign the role.")
             
-            # SIMPAN KE DATABASE OTOMATIS
             loa_data = load_loa_data()
             loa_data[str(self.member_id)] = {
                 "username": self.data_form["username"],
@@ -200,7 +204,6 @@ class AdminApprovalView(discord.ui.View):
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         for child in self.children:
             child.disabled = True
-            
         modal_reject = RejectReasonModal(member_id=self.member_id, interaction_admin=interaction, view_approval=self)
         await interaction.response.send_modal(modal_reject)
 
@@ -218,7 +221,6 @@ class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
         member = interaction.user
         await interaction.response.defer(ephemeral=True)
         
-        # Validasi format tanggal masukan user agar sistem tidak error
         input_date = self.q3.value.strip()
         try:
             datetime.strptime(input_date, "%d/%m/%Y")
@@ -250,16 +252,12 @@ class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
         else:
             await interaction.followup.send("Error: Log channel not found.", ephemeral=True)
 
-# ====================================================================
-# VIEW: MAIN SYSTEM TOMBOL "CREATE LOA"
-# ====================================================================
 class LOAButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
     @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa")
     async def create_loa_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # PENGECEKAN STATUS SAKELAR GLOBAL SEBELUM FORMULIR DIKIRIM
         if not loa_system_active:
             return await interaction.response.send_message(
                 "We regret to inform you that you are unable to submit a Leave of Absence (LOA) request at this time, "
@@ -268,6 +266,114 @@ class LOAButtonView(discord.ui.View):
                 ephemeral=True
             )
         await interaction.response.send_modal(LOAForm())
+
+# ====================================================================
+# FITUR BARU: AUTOMATED ROLEPLAY SESSION PLANNER
+# ====================================================================
+
+# Fungsi pemicu otomatis yang dipanggil oleh alarm scheduler tepat pada jam "Staff Join"
+async def send_automated_server_code(channel_id, server_code, location_rp):
+    channel = bot.get_channel(channel_id)
+    if channel:
+        msg = (
+            f"**Code Server:** `{server_code}`\n"
+            f"**Location / Venue:** {location_rp}\n"
+            f"<@&{ID_ROLE_PEMERINTAH}> | @everyone"
+        )
+        await channel.send(msg)
+
+class SessionPlannerModal(discord.ui.Modal, title="Create Roleplay Session"):
+    # Pertanyaan disesuaikan dengan gambar jadwal referensi user
+    day_date = discord.ui.TextInput(label="Day & Date Session", placeholder="Example: Tuesday, 26 May 2026", required=True)
+    time_schedule = discord.ui.TextInput(
+        label="Schedules (Staff Join, Open, STS, Start)", 
+        style=discord.TextStyle.long,
+        placeholder="Staff join : 20.30\nOpen Server : 21.00\nSTS : 21.05\nRoleplay start : 21.10", 
+        required=True
+    )
+    staff_join_time = discord.ui.TextInput(
+        label="Exact Staff Join Time (For Auto-Code Bot)", 
+        placeholder="Format HH.MM (Example: 20.30)", 
+        max_length=5, 
+        required=True
+    )
+    server_code = discord.ui.TextInput(label="Server Code (Kept secret until staff join)", placeholder="Enter Roblox server code/link...", required=True)
+    location_rp = discord.ui.TextInput(label="AORP / Venue Roleplay Place", placeholder="Example: Gedung DPR-RI / Map Room A", required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        
+        # Validasi waktu input jam untuk alarm otomatis bot
+        time_str = self.staff_join_time.value.strip().replace(":", ".")
+        try:
+            hour, minute = map(int, time_str.split('.'))
+        except ValueError:
+            await interaction.followup.send("❌ Setup Failed! Staff Join time format must be HH.MM or HH:MM (e.g., 20.30)", ephemeral=True)
+            return
+
+        # Format teks pengumuman rapi (menyamakan struktur visual gambar referensi user)
+        announcement_text = (
+            f"**__Rise Country__**\n\n"
+            f"**<@&{ID_ROLE_PEMERINTAH}>**\n"
+            f"{self.day_date.value} at {hour:02d}.{minute:02d}\n"
+            f"<@&{ID_ROLE_PEMERINTAH}> | @everyone\n\n"
+            f"**__Schedule__**\n\n"
+            f"{self.time_schedule.value}\n"
+            f"• End session : Estimated at 11:00 pm or 12:00 pm (depending on the situation)\n"
+            f"Session time : {hour:02d}.{minute:02d} - Selesai (GMT +7)\n\n"
+            f"Note :\n"
+            f"• Minimum requirement: 5 staff\n"
+            f"• Please join at the scheduled time.\n"
+            f"• The schedule may change at any time."
+        )
+
+        announcement_channel = bot.get_channel(ID_CHANNEL_ANNOUNCEMENT)
+        if announcement_channel:
+            # 1. Kirim jadwal pengumuman utama sekarang
+            await announcement_channel.send(announcement_text)
+            
+            # 2. Daftarkan alarm otomatis menggunakan APScheduler untuk mengirim kode server nanti
+            scheduler.add_job(
+                send_automated_server_code,
+                'cron',
+                hour=hour,
+                minute=minute,
+                args=[ID_CHANNEL_ANNOUNCEMENT, self.server_code.value, self.location_rp.value],
+                id=f"session_job_{interaction.id}" # ID unik agar tidak bentrok antar-sesi
+            )
+            
+            await interaction.followup.send(
+                f"✅ Session successfully scheduled! The schedule announcement has been posted. "
+                f"The bot will automatically release the Server Code at {hour:02d}.{minute:02d} sharp.", 
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send("❌ Error: Target announcement channel not found.", ephemeral=True)
+
+@bot.command(name="setsession")
+async def start_session_planner(ctx):
+    # Cek apakah user adalah Administrator ATAU memiliki salah satu role panitia di dalam ALLOWED_ROLE_SESSION_IDS
+    user_roles = [role.id for role in ctx.author.roles]
+    has_permission = ctx.author.guild_permissions.administrator or any(role_id in user_roles for role_id in ALLOWED_ROLE_SESSION_IDS)
+    
+    if not has_permission:
+        # POINT 1: Jika tidak ada akses, bot diam tanpa merespons pesan error ke publik
+        return
+
+    # Jika punya akses, kirimkan formulir pembuatan jadwal
+    modal_session = SessionPlannerModal()
+    # Karena command text biasa tidak bisa langsung memicu .send_modal(), kita pancing memakai tombol sementara
+    class TriggerView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=60)
+        @discord.ui.button(label="Click to Open Session Form", style=discord.ButtonStyle.primary)
+        async def open_form(self, interaction: discord.Interaction, button: discord.ui.Button):
+            if interaction.user.id != ctx.author.id:
+                return await interaction.response.send_message("This setup belongs to someone else.", ephemeral=True)
+            await interaction.response.send_modal(modal_session)
+            self.stop()
+
+    await ctx.send("Click the button below to fill out the session schedule:", view=TriggerView(), delete_after=60)
 
 # ====================================================================
 # COMMAND: KENDALI SISTEM SAKELAR LOA (KHUSUS ADMIN)
@@ -293,22 +399,6 @@ async def toggle_loa_system(ctx, status: str = None):
     else:
         await ctx.send("❌ Invalid format. Use `!loasystem on` or `!loasystem off`.")
 
-@toggle_loa_system.error
-async def loasystem_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ You do not have the required permissions (Administrator) to toggle the LOA system status.")
-
-# ====================================================================
-# MAIN APPLICATION EVENTS
-# ====================================================================
-@bot.event
-async def on_ready():
-    bot.add_view(LOAButtonView())
-    # Hidupkan sistem pengecekan otomatis jam
-    if not check_expired_loa.is_running():
-        check_expired_loa.start()
-    print(f"System Active! {bot.user} is fully automated with database tracking.")
-
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setup_loa(ctx):
@@ -322,15 +412,9 @@ async def setup_loa(ctx):
         "by the President or Vice President.\n\n"
         "Thank you for your cooperation and professionalism."
     )
-    
-    embed = discord.Embed(
-        title="Leave of Absence (LOA) Portal",
-        description=desc_text,
-        color=discord.Color(0x0d50b8)
-    )
+    embed = discord.Embed(title="Leave of Absence (LOA) Portal", description=desc_text, color=discord.Color(0x0d50b8))
     await ctx.send(embed=embed, view=LOAButtonView())
 
-# Perintah manual darurat (jika admin ingin mencopot role LOA instan sebelum waktunya)
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def end_loa(ctx, member: discord.Member):
@@ -342,7 +426,28 @@ async def end_loa(ctx, member: discord.Member):
             del loa_data[str(member.id)]
             save_loa_data(loa_data)
         await ctx.send(f"LOA manually terminated for {member.display_name}.")
-    else:
-        await ctx.send("Member doesn't have LOA role.")
+
+# POINT 1: MENANGKAP ERROR DAN MEMBUAT BOT DIAM (SILENT) UNTUK NON-ADMIN
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        # Sengaja dikosongkan agar bot tidak merespons apa pun di channel jika diketik orang biasa
+        return
+    raise error
+
+# ====================================================================
+# MAIN APPLICATION EVENTS
+# ====================================================================
+@bot.event
+async def on_ready():
+    bot.add_view(LOAButtonView())
+    if not check_expired_loa.is_running():
+        check_expired_loa.start()
+    
+    # Menghidupkan alarm pemicu otomatis kode server
+    if not scheduler.running:
+        scheduler.start()
+        
+    print(f"System Active! {bot.user} is fully automated with schedule tracking.")
 
 bot.run(os.getenv('DISCORD_TOKEN'))
