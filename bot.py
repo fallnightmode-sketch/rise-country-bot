@@ -35,6 +35,7 @@ DATA_FILE = "loa_data.json"
 
 ID_CHANNEL_ANNOUNCEMENT = 1400173631421546620 
 
+# ID Target Channel Pengumuman STRICT RP Terpilih
 SERVER_CHANNELS = {
     "1": 1351207506612846638,
     "2": 1351210046599462945,
@@ -48,7 +49,6 @@ ALLOWED_ROLE_SESSION_IDS = [
 ]
 
 loa_system_active = True
-session_storage = {}  # Penyimpanan sementara data form antar-halaman
 
 # ====================================================================
 # DATABASE FUNCTIONS
@@ -168,7 +168,7 @@ class LOAButtonView(discord.ui.View):
 
 
 # ====================================================================
-# FIX: REWORKED INTERACTIVE MULTI-PAGE ROLEPLAY PLANNER (STABLE CONSTRUCTOR)
+# STABLE & FIXED: INTEGRATED SINGLE-PAGE ROLEPLAY PLANNER MODAL
 # ====================================================================
 
 async def send_automated_strict_rp_template(target_channel_id, host_name, map_author, aorp_loc, server_code):
@@ -228,44 +228,94 @@ async def send_automated_strict_rp_template(target_channel_id, host_name, map_au
         )
         await channel.send(template)
 
-# Modal Jendela Kedua (Pertanyaan 5 sampai 8)
-class SessionPlannerPage2Modal(discord.ui.Modal, title="Session Technical Details"):
-    staff_time = discord.ui.TextInput(label="5. Staff Join Time", placeholder="Format HH.MM (Example: 20.30)", max_length=5, required=True)
-    server_code = discord.ui.TextInput(label="6. Server Code", placeholder="Please enter server code.", required=True)
-    aorp_location = discord.ui.TextInput(label="7. AORP", placeholder="Please enter the AORP.", required=True)
-    target_server = discord.ui.TextInput(label="8. Target Server Output Channel", placeholder="Enter 1, 2, or 3 only.", max_length=1, required=True)
-
-    def __init__(self, session_id: str, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.session_id = session_id
+class UnifiedSessionPlannerModal(discord.ui.Modal, title="Create Roleplay Session"):
+    field_identities = discord.ui.TextInput(
+        label="1 & 2. Host & Map Author Details",
+        placeholder="Host Name: ...\nMap Author Name: ...",
+        style=discord.TextStyle.long,
+        required=True
+    )
+    field_day_date = discord.ui.TextInput(
+        label="3. Day, Date, and Time Session",
+        placeholder="Example: Tuesday, 26 May 2026 at 21.00",
+        style=discord.TextStyle.short,
+        required=True
+    )
+    field_schedules = discord.ui.TextInput(
+        label="4. Schedules (Open Server, STS, Start)",
+        placeholder="Open Server: 21.00\nSTS: 21.05\nRoleplay Start: 21.10",
+        style=discord.TextStyle.long,
+        required=True
+    )
+    field_tech_details = discord.ui.TextInput(
+        label="5 & 6. Staff Join Time & Server Code",
+        placeholder="Staff Join Time (Format HH.MM): 20.30\nServer Code: [Masukan Kode Di Sini]",
+        style=discord.TextStyle.long,
+        required=True
+    )
+    field_venue_channel = discord.ui.TextInput(
+        label="7 & 8. AORP & Target Server Channel",
+        placeholder="AORP Venue: Gedung DPR-RI\nTarget Channel Server (Ketik angka 1, 2, atau 3): 1",
+        style=discord.TextStyle.long,
+        required=True
+    )
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
-        selected_server = self.target_server.value.strip()
+        # --- PARSING DATA SECARA INTERAL ---
+        # 1. Ekstraksi Host & Map Author
+        id_lines = [line.strip() for line in self.field_identities.value.split('\n') if line.strip()]
+        host_name = "Staff RCRP"
+        map_author = "Staff RCRP"
+        for line in id_lines:
+            if "host" in line.lower():
+                host_name = line.split(':', 1)[-1].strip()
+            elif "map" in line.lower():
+                map_author = line.split(':', 1)[-1].strip()
+
+        # 2. Ekstraksi Staff Time & Server Code
+        tech_lines = [line.strip() for line in self.field_tech_details.value.split('\n') if line.strip()]
+        staff_time_str = "20.30"
+        server_code = "PRIVATE-SERVER"
+        for line in tech_lines:
+            if "time" in line.lower() or "join" in line.lower():
+                staff_time_str = line.split(':', 1)[-1].strip().replace(":", ".")
+            elif "code" in line.lower() or "server" in line.lower():
+                server_code = line.split(':', 1)[-1].strip()
+
+        # 3. Ekstraksi AORP & Target Channel
+        venue_lines = [line.strip() for line in self.field_venue_channel.value.split('\n') if line.strip()]
+        aorp_location = "LOC"
+        selected_server = "1"
+        for line in venue_lines:
+            if "aorp" in line.lower() or "venue" in line.lower():
+                aorp_location = line.split(':', 1)[-1].strip()
+            elif "channel" in line.lower() or "target" in line.lower() or "server" in line.lower():
+                selected_server = "".join(filter(str.isdigit, line.split(':', 1)[-1].strip()))
+
+        # --- VALIDASI INPUT ---
         if selected_server not in SERVER_CHANNELS:
-            return await interaction.followup.send("Setup failed. Server destination selection must be either 1, 2, or 3.", ephemeral=True)
+            return await interaction.followup.send("Setup failed. Server channel detection must resolve to 1, 2, or 3.", ephemeral=True)
 
-        time_str = self.staff_time.value.strip().replace(":", ".")
         try:
-            hour, minute = map(int, time_str.split('.'))
-        except ValueError:
-            return await interaction.followup.send("Setup failed. Staff Join time specification must follow HH.MM format.", ephemeral=True)
+            # Ambil angka jam menit dari teks input format HH.MM
+            time_clean = "".join([c for c in staff_time_str if c.isdigit() or c == '.'])
+            hour, minute = map(int, time_clean.split('.'))
+        except Exception:
+            return await interaction.followup.send("Setup failed. Please make sure the Staff Join Time uses the HH.MM format.", ephemeral=True)
 
-        page1_data = session_storage.get(self.session_id)
-        if not page1_data:
-            return await interaction.followup.send("Session data expired or lost. Please re-run !setsession.", ephemeral=True)
-
+        # --- DISTRIBUSI PENGUMUMAN & PENJADWALAN ---
         announcement_text = (
             f"__**Rise Country**__\n"
             f" \n"
             f"<@819880959285395456>\n"
-            f"{page1_data['day_date']}\n"
+            f"{self.field_day_date.value}\n"
             f"-# <@&1354869839692562523> | @everyone\n"
             f" \n"
             f"__**Schedule**__\n"
             f" \n"
-            f"{page1_data['schedules']}\n"
+            f"{self.field_schedules.value}\n"
             f"- End session : Estimated at 11:00 pm or 12:00 pm (depending on the situation)\n"
             f" \n"
             f"Session time : {hour:02d}.{minute:02d} - Selesai (GMT +7)\n"
@@ -286,58 +336,14 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Session Technical Detail
                 'cron',
                 hour=hour,
                 minute=minute,
-                args=[
-                    chosen_channel_id,
-                    page1_data["host_name"],
-                    page1_data["map_author"],
-                    self.aorp_location.value,
-                    self.server_code.value
-                ],
-                id=f"strict_server_job_{self.session_id}"
+                args=[chosen_channel_id, host_name, map_author, aorp_location, server_code],
+                id=f"strict_job_{interaction.id}"
             )
-            session_storage.pop(self.session_id, None)
             
-            await interaction.message.edit(content="✅ **Session Creation Complete!** Form data submitted and automated task scheduled successfully.", view=None)
-            await interaction.followup.send("Form submission fully completed.", ephemeral=True)
+            await interaction.message.delete() # Hapus tombol pemicu awal agar rapi
+            await interaction.followup.send(f"Success! Schedule created and template automated for Server {selected_server}.", ephemeral=True)
         else:
-            await interaction.followup.send("Configuration error. Destination channel could not be identified.", ephemeral=True)
-
-# Modal Jendela Pertama (Pertanyaan 1 sampai 4)
-class SessionPlannerPage1Modal(discord.ui.Modal, title="Create Roleplay Session"):
-    host_name = discord.ui.TextInput(label="1. Host Identity", placeholder="Please enter the identity of the host.", required=True, max_length=100)
-    map_author = discord.ui.TextInput(label="2. Map Author Identity", placeholder="Please enter the identity of the map author.", required=True, max_length=100)
-    day_date = discord.ui.TextInput(label="3. Day, Date, and Time Session", placeholder="Example: Monday, 1 June 2026 at 21:00", required=True)
-    schedules = discord.ui.TextInput(
-        label="4. Schedules (Open Server, STS, Start Session)", 
-        style=discord.TextStyle.long,
-        placeholder="Open Server: 21.00\nSTS: 21.05\nRoleplay Start: 21.10", 
-        required=True
-    )
-
-    def __init__(self, session_id: str, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.session_id = session_id
-
-    async def on_submit(self, interaction: discord.Interaction):
-        session_storage[self.session_id] = {
-            "host_name": self.host_name.value,
-            "map_author": self.map_author.value,
-            "day_date": self.day_date.value,
-            "schedules": self.schedules.value
-        }
-        
-        class Page2TriggerView(discord.ui.View):
-            def __init__(self, session_id: str):
-                super().__init__(timeout=120)
-                self.session_id = session_id
-            @discord.ui.button(label="Click to Complete Technical Form (Page 2)", style=discord.ButtonStyle.primary)
-            async def open_page2(self, inter: discord.Interaction, button: discord.ui.Button):
-                await inter.response.send_modal(SessionPlannerPage2Modal(session_id=self.session_id))
-
-        await interaction.response.edit_message(
-            content="**Part 1 Saved!** Please click the blue button below to complete the final part (Questions 5-8) of the session configuration.",
-            view=Page2TriggerView(session_id=self.session_id)
-        )
+            await interaction.followup.send("Error. Main announcement channel not found.", ephemeral=True)
 
 @bot.command(name="setsession")
 async def start_session_planner(ctx):
@@ -347,24 +353,19 @@ async def start_session_planner(ctx):
     if not has_permission: return
 
     instruction_text = (
-        "Click the button below to complete and submit the roleplay session schedule form. "
-        "Please ensure that all required information is entered accurately and completely to facilitate "
-        "proper scheduling and coordination of the session."
+        "Click the button below to open the complete session schedule form. "
+        "Please read the guide details inside each field carefully."
     )
     
-    session_id = str(ctx.message.id)
-    
     class TriggerView(discord.ui.View):
-        def __init__(self, session_id: str):
-            super().__init__(timeout=60)
-            self.session_id = session_id
+        def __init__(self): super().__init__(timeout=60)
         @discord.ui.button(label="Click to Open Session Form", style=discord.ButtonStyle.secondary)
         async def open_form(self, interaction: discord.Interaction, button: discord.ui.Button):
             if interaction.user.id != ctx.author.id:
                 return await interaction.response.send_message("Access denied.", ephemeral=True)
-            await interaction.response.send_modal(SessionPlannerPage1Modal(session_id=self.session_id))
+            await interaction.response.send_modal(UnifiedSessionPlannerModal())
 
-    await ctx.send(instruction_text, view=TriggerView(session_id=session_id))
+    await ctx.send(instruction_text, view=TriggerView())
 
 # ====================================================================
 # MANAGEMENT COMMANDS & ERRORS
