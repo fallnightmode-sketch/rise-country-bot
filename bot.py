@@ -20,6 +20,12 @@ GUILD_ID = 1351182942625337378            # Ganti dengan ID Server (Guild) kamu
 DATA_FILE = "loa_data.json"
 
 # ====================================================================
+# SAKELAR SISTEM LOA (GLOBAL STATE)
+# True = Aktif (Menerima LOA), False = Nonaktif (LOA Ditutup)
+# ====================================================================
+loa_system_active = True
+
+# ====================================================================
 # DATABASE FUNCTIONS
 # ====================================================================
 def load_loa_data():
@@ -245,7 +251,7 @@ class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
             await interaction.followup.send("Error: Log channel not found.", ephemeral=True)
 
 # ====================================================================
-# VIEW: MAIN SYSTEM TOMBOL "CREATE LOA" (WARNA ABU-ABU KEDALAM)
+# VIEW: MAIN SYSTEM TOMBOL "CREATE LOA"
 # ====================================================================
 class LOAButtonView(discord.ui.View):
     def __init__(self):
@@ -253,7 +259,42 @@ class LOAButtonView(discord.ui.View):
 
     @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa")
     async def create_loa_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # PENGECEKAN STATUS SAKELAR GLOBAL SEBELUM FORMULIR DIKIRIM
+        if not loa_system_active:
+            return await interaction.response.send_message(
+                "🔒 **Sorry, the LOA Submission System is currently disabled by the Administration.** Please try again later.", 
+                ephemeral=True
+            )
         await interaction.response.send_modal(LOAForm())
+
+# ====================================================================
+# COMMAND: KENDALI SISTEM SAKELAR LOA (KHUSUS ADMIN)
+# ====================================================================
+@bot.command(name="loasystem")
+@commands.has_permissions(administrator=True)
+async def toggle_loa_system(ctx, status: str = None):
+    global loa_system_active
+
+    if status is None:
+        current_status = "🟢 ACTIVE (Menerima LOA)" if loa_system_active else "🔴 DISABLED (LOA Ditutup)"
+        return await ctx.send(
+            f"⚙️ **Sistem Kontrol LOA:**\nStatus saat ini: **{current_status}**\n"
+            f"Gunakan `!loasystem off` untuk menutup atau `!loasystem on` untuk membuka portal pendaftaran."
+        )
+
+    if status.lower() == "off":
+        loa_system_active = False
+        await ctx.send("🛑 **Portal LOA telah DIMATIKAN.** Anggota/Staff tidak akan bisa membuka formulir pendaftaran untuk sementara waktu.")
+    elif status.lower() == "on":
+        loa_system_active = True
+        await ctx.send("✅ **Portal LOA telah DINYALAKAN kembali.** Anggota/Staff sekarang bisa mendaftar seperti biasa.")
+    else:
+        await ctx.send("❌ Format salah! Gunakan `!loasystem on` atau `!loasystem off`.")
+
+@toggle_loa_system.error
+async def loasystem_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Kamu tidak memiliki izin (Administrator) untuk mengubah status sistem portal LOA.")
 
 # ====================================================================
 # MAIN APPLICATION EVENTS
