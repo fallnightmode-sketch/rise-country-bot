@@ -33,10 +33,8 @@ ID_ROLE_LOA = 1469270847905730590
 GUILD_ID = 1351182942625337378            
 DATA_FILE = "loa_data.json"
 
-# ID Channel Pengumuman Utama (Jadwal Ringkas)
 ID_CHANNEL_ANNOUNCEMENT = 1400173631421546620 
 
-# Pilihan Target Channel untuk Template STRICT RP (Sesuai Server)
 SERVER_CHANNELS = {
     "1": 1351207506612846638,
     "2": 1351210046599462945,
@@ -50,6 +48,7 @@ ALLOWED_ROLE_SESSION_IDS = [
 ]
 
 loa_system_active = True
+session_storage = {}  # Penyimpanan sementara data form antar-halaman
 
 # ====================================================================
 # DATABASE FUNCTIONS
@@ -72,14 +71,11 @@ def save_loa_data(data):
 async def check_expired_loa():
     guild = bot.get_guild(GUILD_ID)
     if not guild: return
-
     role_loa = guild.get_role(ID_ROLE_LOA)
     if not role_loa: return
-
     loa_data = load_loa_data()
     now = datetime.now()
     updated = False
-
     for member_id_str, details in list(loa_data.items()):
         try:
             end_date = datetime.strptime(details["end_date"], "%d/%m/%Y")
@@ -89,13 +85,9 @@ async def check_expired_loa():
                 if member and role_loa in member.roles:
                     try:
                         await member.remove_roles(role_loa)
-                        embed_dm = discord.Embed(
-                            title="Notice of LOA Termination",
-                            description=f"Hello {member.mention},\n\nThis is an official automated notification to inform you that your Leave of Absence (LOA) period has concluded.",
-                            color=discord.Color(0x0d50b8)
-                        )
+                        embed_dm = discord.Embed(title="Notice of LOA Termination", color=discord.Color(0x0d50b8))
                         await member.send(embed=embed_dm)
-                    except Exception as e: print(f"Error: {e}")
+                    except Exception: pass
                 del loa_data[member_id_str]
                 updated = True
         except ValueError: continue
@@ -174,8 +166,9 @@ class LOAButtonView(discord.ui.View):
         if not loa_system_active: return await interaction.response.send_message("The LOA system has been temporarily disabled.", ephemeral=True)
         await interaction.response.send_modal(LOAForm())
 
+
 # ====================================================================
-# AUTOMATED ROLEPLAY SESSION PLANNER (MULTI-PAGE MODAL)
+# FIX: REWORKED INTERACTIVE MULTI-PAGE ROLEPLAY PLANNER
 # ====================================================================
 
 async def send_automated_strict_rp_template(target_channel_id, host_name, map_author, aorp_loc, server_code):
@@ -222,7 +215,7 @@ async def send_automated_strict_rp_template(target_channel_id, host_name, map_au
             f"--------------------\n"
             f"**SPEED LIMIT**\n"
             f"- Max Speed : 85\n"
-            f"-max Speed Gang : 30\n"
+            f"- Max Speed Gang : 30\n"
             f"--------------------\n"
             f"**FRP**\n"
             f"1x = Warn\n"
@@ -235,45 +228,45 @@ async def send_automated_strict_rp_template(target_channel_id, host_name, map_au
         )
         await channel.send(template)
 
-# Halaman Kedua Modal (Pertanyaan 5 sampai 8)
+# Modal Jendela Kedua (Pertanyaan 5 sampai 8)
 class SessionPlannerPage2Modal(discord.ui.Modal, title="Session Technical Details"):
     staff_time = discord.ui.TextInput(label="5. Staff Join Time", placeholder="Format HH.MM (Example: 20.30)", max_length=5, required=True)
     server_code = discord.ui.TextInput(label="6. Server Code", placeholder="Please enter server code.", required=True)
     aorp_location = discord.ui.TextInput(label="7. AORP", placeholder="Please enter the AORP.", required=True)
     target_server = discord.ui.TextInput(label="8. Target Server Output Channel", placeholder="Enter 1, 2, or 3 only.", max_length=1, required=True)
 
-    def __init__(self, page1_data: dict):
+    def __init__(self, session_id: str):
         super().__init__()
-        self.page1_data = page1_data
+        self.session_id = session_id
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
-        # Validasi Pilihan Channel Server
         selected_server = self.target_server.value.strip()
         if selected_server not in SERVER_CHANNELS:
-            await interaction.followup.send("Setup failed. Server destination selection must be either 1, 2, or 3.", ephemeral=True)
-            return
+            return await interaction.followup.send("Setup failed. Server destination selection must be either 1, 2, or 3.", ephemeral=True)
 
-        # Validasi format jam
         time_str = self.staff_time.value.strip().replace(":", ".")
         try:
             hour, minute = map(int, time_str.split('.'))
         except ValueError:
-            await interaction.followup.send("Setup failed. Staff Join time specification must follow HH.MM format.", ephemeral=True)
-            return
+            return await interaction.followup.send("Setup failed. Staff Join time specification must follow HH.MM format.", ephemeral=True)
 
-        # Konstruksi pengumuman jadwal ringkas
+        # Menggabungkan data dari Page 1 yang disimpan di memori global sementara
+        page1_data = session_storage.get(self.session_id)
+        if not page1_data:
+            return await interaction.followup.send("Session data expired or lost. Please re-run !setsession.", ephemeral=True)
+
         announcement_text = (
             f"__**Rise Country**__\n"
             f" \n"
             f"<@819880959285395456>\n"
-            f"{self.page1_data['day_date']}\n"
+            f"{page1_data['day_date']}\n"
             f"-# <@&1354869839692562523> | @everyone\n"
             f" \n"
             f"__**Schedule**__\n"
             f" \n"
-            f"{self.page1_data['schedules']}\n"
+            f"{page1_data['schedules']}\n"
             f"- End session : Estimated at 11:00 pm or 12:00 pm (depending on the situation)\n"
             f" \n"
             f"Session time : {hour:02d}.{minute:02d} - Selesai (GMT +7)\n"
@@ -286,13 +279,9 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Session Technical Detail
 
         announcement_channel = bot.get_channel(ID_CHANNEL_ANNOUNCEMENT)
         if announcement_channel:
-            # Kirim Pengumuman Ringkas ke channel (1400173631421546620)
             await announcement_channel.send(announcement_text)
-            
-            # Resolve target ID channel STRICT RP terpilih (Server 1, 2, atau 3)
             chosen_channel_id = SERVER_CHANNELS[selected_server]
 
-            # Daftarkan penugasan otomatis APScheduler
             scheduler.add_job(
                 send_automated_strict_rp_template,
                 'cron',
@@ -300,18 +289,23 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Session Technical Detail
                 minute=minute,
                 args=[
                     chosen_channel_id,
-                    self.page1_data["host_name"],
-                    self.page1_data["map_author"],
+                    page1_data["host_name"],
+                    page1_data["map_author"],
                     self.aorp_location.value,
                     self.server_code.value
                 ],
-                id=f"strict_server_job_{interaction.id}"
+                id=f"strict_server_job_{self.session_id}"
             )
-            await interaction.followup.send(f"Configuration saved successfully. Announcement sent. Template scheduled for delivery to Server {selected_server}.", ephemeral=True)
+            # Bersihkan memori penampung
+            session_storage.pop(self.session_id, None)
+            
+            # Ubah tampilan chat utama menandakan proses komplit
+            await interaction.message.edit(content="✅ **Session Creation Complete!** Form data submitted and automated task scheduled successfully.", view=None)
+            await interaction.followup.send("Form submission fully completed.", ephemeral=True)
         else:
-            await interaction.followup.send("Configuration error. Main announcement destination channel could not be identified.", ephemeral=True)
+            await interaction.followup.send("Configuration error. Destination channel could not be identified.", ephemeral=True)
 
-# Halaman Pertama Modal (Pertanyaan 1 sampai 4)
+# Modal Jendela Pertama (Pertanyaan 1 sampai 4)
 class SessionPlannerPage1Modal(discord.ui.Modal, title="Create Roleplay Session"):
     host_name = discord.ui.TextInput(label="1. Host Identity", placeholder="Please enter the identity of the host.", required=True, max_length=100)
     map_author = discord.ui.TextInput(label="2. Map Author Identity", placeholder="Please enter the identity of the map author.", required=True, max_length=100)
@@ -323,23 +317,40 @@ class SessionPlannerPage1Modal(discord.ui.Modal, title="Create Roleplay Session"
         required=True
     )
 
+    def __init__(self, session_id: str):
+        super().__init__()
+        self.session_id = session_id
+
     async def on_submit(self, interaction: discord.Interaction):
-        # Menyimpan data Page 1
-        page1_data = {
+        # Simpan sementara data dari halaman pertama ke global storage
+        session_storage[self.session_id] = {
             "host_name": self.host_name.value,
             "map_author": self.map_author.value,
             "day_date": self.day_date.value,
             "schedules": self.schedules.value
         }
-        # Melontarkan Modal Page 2 secara berantai
-        await interaction.response.send_modal(SessionPlannerPage2Modal(page1_data=page1_data))
+        
+        # Tampilan Tombol Baru untuk Halaman Kedua (Menghindari Limitasi Modal Discord)
+        class Page2TriggerView(discord.ui.View):
+            def __init__(self, session_id: str):
+                super().__init__(timeout=120)
+                self.session_id = session_id
+            @discord.ui.button(label="Click to Complete Technical Form (Page 2)", style=discord.ButtonStyle.primary)
+            async def open_page2(self, inter: discord.Interaction, button: discord.ui.Button):
+                await inter.response.send_modal(SessionPlannerPage2Modal(session_id=self.session_id))
+
+        # Update pesan asli agar menginstruksikan pengguna membuka halaman 2
+        await interaction.response.edit_message(
+            content="**Part 1 Saved!** Please click the blue button below to complete the final part (Questions 5-8) of the session configuration.",
+            view=Page2TriggerView(session_id=self.session_id)
+        )
 
 @bot.command(name="setsession")
 async def start_session_planner(ctx):
     user_roles = [role.id for role in ctx.author.roles]
     has_permission = ctx.author.guild_permissions.administrator or any(role_id in user_roles for role_id in ALLOWED_ROLE_SESSION_IDS)
     
-    if not has_permission: return  # SILENT
+    if not has_permission: return
 
     instruction_text = (
         "Click the button below to complete and submit the roleplay session schedule form. "
@@ -347,19 +358,22 @@ async def start_session_planner(ctx):
         "proper scheduling and coordination of the session."
     )
     
+    session_id = str(ctx.message.id) # Token pengenal unik per sesi pengisian
+    
     class TriggerView(discord.ui.View):
-        def __init__(self): super().__init__(timeout=60)
+        def __init__(self, session_id: str):
+            super().__init__(timeout=60)
+            self.session_id = session_id
         @discord.ui.button(label="Click to Open Session Form", style=discord.ButtonStyle.secondary)
         async def open_form(self, interaction: discord.Interaction, button: discord.ui.Button):
             if interaction.user.id != ctx.author.id:
-                return await interaction.response.send_message("Access denied. Direct session generation authorized only for the initiator.", ephemeral=True)
-            await interaction.response.send_modal(SessionPlannerPage1Modal())
-            self.stop()
+                return await interaction.response.send_message("Access denied.", ephemeral=True)
+            await interaction.response.send_modal(SessionPlannerPage1Modal(session_id=self.session_id))
 
-    await ctx.send(instruction_text, view=TriggerView(), delete_after=60)
+    await ctx.send(instruction_text, view=TriggerView(session_id=session_id))
 
 # ====================================================================
-# MANAGEMENT COMMANDS & ERRORS
+# MANAGEMENT COMMANDS & ERROS
 # ====================================================================
 @bot.command(name="loasystem")
 @commands.has_permissions(administrator=True)
@@ -381,21 +395,9 @@ async def setup_loa(ctx):
     embed = discord.Embed(title="Leave of Absence (LOA) Portal", description="Welcome to the Leave of Absence System.", color=discord.Color(0x0d50b8))
     await ctx.send(embed=embed, view=LOAButtonView())
 
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def end_loa(ctx, member: discord.Member):
-    role_loa = ctx.guild.get_role(ID_ROLE_LOA)
-    if role_loa in member.roles:
-        await member.remove_roles(role_loa)
-        loa_data = load_loa_data()
-        if str(member.id) in loa_data:
-            del loa_data[str(member.id)]
-            save_loa_data(loa_data)
-        await ctx.send(f"LOA manually terminated for {member.display_name}.")
-
 @bot.event
 async def on_command_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions): return  # SILENT
+    if isinstance(error, commands.MissingPermissions): return
     raise error
 
 @bot.event
