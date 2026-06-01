@@ -1,10 +1,21 @@
+import sys
+import subprocess
+
+# ====================================================================
+# AUTO-INSTALLER GUARD (Mencegah Crash ModuleNotFoundError di Railway)
+# ====================================================================
+try:
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+except ModuleNotFoundError:
+    print("Mendapati 'apscheduler' belum terpasang. Menginstal secara otomatis...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "apscheduler==3.10.4"])
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 import discord
 from discord.ext import commands, tasks
 import json
 import os
-from datetime import datetime, time
-# Memakai APScheduler untuk trigger alarm pengiriman kode server secara presisi berdasarkan jam:menit
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from datetime import datetime
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -13,30 +24,30 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Inisialisasi scheduler global
+# Inisialisasi scheduler setelah dipastikan modulnya terinstal
 scheduler = AsyncIOScheduler()
 
 # ====================================================================
 # CONFIGURATION
 # ====================================================================
-ID_CHANNEL_LOG_LOA = 1510642659776266442  # Ganti dengan ID Channel Admin kamu
-ID_ROLE_LOA = 1469270847905730590         # Ganti dengan ID Role LOA kamu
-GUILD_ID = 1351182942625337378            # Ganti dengan ID Server (Guild) kamu
+ID_CHANNEL_LOG_LOA = 1510642659776266442  # ID Channel Admin kamu
+ID_ROLE_LOA = 1469270847905730590         # ID Role LOA kamu
+GUILD_ID = 1351182942625337378            # ID Server (Guild) kamu
 DATA_FILE = "loa_data.json"
 
 # ID Khusus untuk Fitur Pengumuman Session Roleplay
-ID_ROLE_PEMERINTAH = 1508831415461220423  # Tag Pemerintah sesuai permintaan
-ID_CHANNEL_ANNOUNCEMENT = 1351182942625337378 # Ganti dengan ID channel tempat pengumuman jadwal dikirim
+ID_ROLE_PEMERINTAH = 1508831415461220423  # Tag Pemerintah
+ID_CHANNEL_ANNOUNCEMENT = 1351182942625337378 # ID channel tempat pengumuman jadwal dikirim
 
-# Role yang diizinkan menggunakan !setsession (Ganti atau tambah sesuai kebutuhan servermu)
+# Role yang diizinkan menggunakan !setsession
 ALLOWED_ROLE_SESSION_IDS = [
-    1508831415461220423, # Contoh: Role Pemerintah
-    # Kamu bisa menambahkan ID role panitia/staf lainnya di sini dipisahkan koma
+    1508831415461220423, # Role Pemerintah
+    1351203409692463135, # ID Role Staf Tambahan 1
+    1434199488398102688  # ID Role Staf Tambahan 2
 ]
 
 # ====================================================================
 # SAKELAR SISTEM LOA (GLOBAL STATE)
-# True = Aktif (Menerima LOA), False = Nonaktif (LOA Ditutup)
 # ====================================================================
 loa_system_active = True
 
@@ -208,7 +219,7 @@ class AdminApprovalView(discord.ui.View):
         await interaction.response.send_modal(modal_reject)
 
 # ====================================================================
-# MODAL: FORMULIR LOA (MAKSIMAL 5 INPUT)
+# MODAL: FORMULIR LOA
 # ====================================================================
 class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
     q1 = discord.ui.TextInput(label="1. Roblox Username", placeholder="Enter your full Roblox username...", required=True, max_length=50)
@@ -268,10 +279,8 @@ class LOAButtonView(discord.ui.View):
         await interaction.response.send_modal(LOAForm())
 
 # ====================================================================
-# FITUR BARU: AUTOMATED ROLEPLAY SESSION PLANNER
+# AUTOMATED ROLEPLAY SESSION PLANNER
 # ====================================================================
-
-# Fungsi pemicu otomatis yang dipanggil oleh alarm scheduler tepat pada jam "Staff Join"
 async def send_automated_server_code(channel_id, server_code, location_rp):
     channel = bot.get_channel(channel_id)
     if channel:
@@ -283,7 +292,6 @@ async def send_automated_server_code(channel_id, server_code, location_rp):
         await channel.send(msg)
 
 class SessionPlannerModal(discord.ui.Modal, title="Create Roleplay Session"):
-    # Pertanyaan disesuaikan dengan gambar jadwal referensi user
     day_date = discord.ui.TextInput(label="Day & Date Session", placeholder="Example: Tuesday, 26 May 2026", required=True)
     time_schedule = discord.ui.TextInput(
         label="Schedules (Staff Join, Open, STS, Start)", 
@@ -303,7 +311,6 @@ class SessionPlannerModal(discord.ui.Modal, title="Create Roleplay Session"):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
-        # Validasi waktu input jam untuk alarm otomatis bot
         time_str = self.staff_join_time.value.strip().replace(":", ".")
         try:
             hour, minute = map(int, time_str.split('.'))
@@ -311,7 +318,6 @@ class SessionPlannerModal(discord.ui.Modal, title="Create Roleplay Session"):
             await interaction.followup.send("❌ Setup Failed! Staff Join time format must be HH.MM or HH:MM (e.g., 20.30)", ephemeral=True)
             return
 
-        # Format teks pengumuman rapi (menyamakan struktur visual gambar referensi user)
         announcement_text = (
             f"**__Rise Country__**\n\n"
             f"**<@&{ID_ROLE_PEMERINTAH}>**\n"
@@ -329,17 +335,15 @@ class SessionPlannerModal(discord.ui.Modal, title="Create Roleplay Session"):
 
         announcement_channel = bot.get_channel(ID_CHANNEL_ANNOUNCEMENT)
         if announcement_channel:
-            # 1. Kirim jadwal pengumuman utama sekarang
             await announcement_channel.send(announcement_text)
             
-            # 2. Daftarkan alarm otomatis menggunakan APScheduler untuk mengirim kode server nanti
             scheduler.add_job(
                 send_automated_server_code,
                 'cron',
                 hour=hour,
                 minute=minute,
                 args=[ID_CHANNEL_ANNOUNCEMENT, self.server_code.value, self.location_rp.value],
-                id=f"session_job_{interaction.id}" # ID unik agar tidak bentrok antar-sesi
+                id=f"session_job_{interaction.id}"
             )
             
             await interaction.followup.send(
@@ -352,17 +356,13 @@ class SessionPlannerModal(discord.ui.Modal, title="Create Roleplay Session"):
 
 @bot.command(name="setsession")
 async def start_session_planner(ctx):
-    # Cek apakah user adalah Administrator ATAU memiliki salah satu role panitia di dalam ALLOWED_ROLE_SESSION_IDS
     user_roles = [role.id for role in ctx.author.roles]
     has_permission = ctx.author.guild_permissions.administrator or any(role_id in user_roles for role_id in ALLOWED_ROLE_SESSION_IDS)
     
     if not has_permission:
-        # POINT 1: Jika tidak ada akses, bot diam tanpa merespons pesan error ke publik
-        return
+        return  # SILENT: Bot diam saja tanpa merespons jika bukan admin/staf berizin
 
-    # Jika punya akses, kirimkan formulir pembuatan jadwal
     modal_session = SessionPlannerModal()
-    # Karena command text biasa tidak bisa langsung memicu .send_modal(), kita pancing memakai tombol sementara
     class TriggerView(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=60)
@@ -427,12 +427,10 @@ async def end_loa(ctx, member: discord.Member):
             save_loa_data(loa_data)
         await ctx.send(f"LOA manually terminated for {member.display_name}.")
 
-# POINT 1: MENANGKAP ERROR DAN MEMBUAT BOT DIAM (SILENT) UNTUK NON-ADMIN
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
-        # Sengaja dikosongkan agar bot tidak merespons apa pun di channel jika diketik orang biasa
-        return
+        return  # SILENT
     raise error
 
 # ====================================================================
@@ -444,10 +442,9 @@ async def on_ready():
     if not check_expired_loa.is_running():
         check_expired_loa.start()
     
-    # Menghidupkan alarm pemicu otomatis kode server
     if not scheduler.running:
         scheduler.start()
         
-    print(f"System Active! {bot.user} is fully automated with schedule tracking.")
+    print(f"System Active! {bot.user} is fully automated.")
 
 bot.run(os.getenv('DISCORD_TOKEN'))
