@@ -168,7 +168,7 @@ class LOAButtonView(discord.ui.View):
 
 
 # ====================================================================
-# FIX: REWORKED INTERACTIVE MULTI-PAGE ROLEPLAY PLANNER
+# FIX: REWORKED INTERACTIVE MULTI-PAGE ROLEPLAY PLANNER (STABLE CONSTRUCTOR)
 # ====================================================================
 
 async def send_automated_strict_rp_template(target_channel_id, host_name, map_author, aorp_loc, server_code):
@@ -235,8 +235,8 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Session Technical Detail
     aorp_location = discord.ui.TextInput(label="7. AORP", placeholder="Please enter the AORP.", required=True)
     target_server = discord.ui.TextInput(label="8. Target Server Output Channel", placeholder="Enter 1, 2, or 3 only.", max_length=1, required=True)
 
-    def __init__(self, session_id: str):
-        super().__init__()
+    def __init__(self, session_id: str, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.session_id = session_id
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -252,7 +252,6 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Session Technical Detail
         except ValueError:
             return await interaction.followup.send("Setup failed. Staff Join time specification must follow HH.MM format.", ephemeral=True)
 
-        # Menggabungkan data dari Page 1 yang disimpan di memori global sementara
         page1_data = session_storage.get(self.session_id)
         if not page1_data:
             return await interaction.followup.send("Session data expired or lost. Please re-run !setsession.", ephemeral=True)
@@ -296,10 +295,8 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Session Technical Detail
                 ],
                 id=f"strict_server_job_{self.session_id}"
             )
-            # Bersihkan memori penampung
             session_storage.pop(self.session_id, None)
             
-            # Ubah tampilan chat utama menandakan proses komplit
             await interaction.message.edit(content="✅ **Session Creation Complete!** Form data submitted and automated task scheduled successfully.", view=None)
             await interaction.followup.send("Form submission fully completed.", ephemeral=True)
         else:
@@ -317,12 +314,11 @@ class SessionPlannerPage1Modal(discord.ui.Modal, title="Create Roleplay Session"
         required=True
     )
 
-    def __init__(self, session_id: str):
-        super().__init__()
+    def __init__(self, session_id: str, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.session_id = session_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Simpan sementara data dari halaman pertama ke global storage
         session_storage[self.session_id] = {
             "host_name": self.host_name.value,
             "map_author": self.map_author.value,
@@ -330,7 +326,6 @@ class SessionPlannerPage1Modal(discord.ui.Modal, title="Create Roleplay Session"
             "schedules": self.schedules.value
         }
         
-        # Tampilan Tombol Baru untuk Halaman Kedua (Menghindari Limitasi Modal Discord)
         class Page2TriggerView(discord.ui.View):
             def __init__(self, session_id: str):
                 super().__init__(timeout=120)
@@ -339,7 +334,6 @@ class SessionPlannerPage1Modal(discord.ui.Modal, title="Create Roleplay Session"
             async def open_page2(self, inter: discord.Interaction, button: discord.ui.Button):
                 await inter.response.send_modal(SessionPlannerPage2Modal(session_id=self.session_id))
 
-        # Update pesan asli agar menginstruksikan pengguna membuka halaman 2
         await interaction.response.edit_message(
             content="**Part 1 Saved!** Please click the blue button below to complete the final part (Questions 5-8) of the session configuration.",
             view=Page2TriggerView(session_id=self.session_id)
@@ -358,7 +352,7 @@ async def start_session_planner(ctx):
         "proper scheduling and coordination of the session."
     )
     
-    session_id = str(ctx.message.id) # Token pengenal unik per sesi pengisian
+    session_id = str(ctx.message.id)
     
     class TriggerView(discord.ui.View):
         def __init__(self, session_id: str):
@@ -373,7 +367,7 @@ async def start_session_planner(ctx):
     await ctx.send(instruction_text, view=TriggerView(session_id=session_id))
 
 # ====================================================================
-# MANAGEMENT COMMANDS & ERROS
+# MANAGEMENT COMMANDS & ERRORS
 # ====================================================================
 @bot.command(name="loasystem")
 @commands.has_permissions(administrator=True)
