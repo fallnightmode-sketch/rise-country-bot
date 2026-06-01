@@ -259,7 +259,7 @@ class LOAButtonView(discord.ui.View):
 
     @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa")
     async def create_loa_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # PENGECEKAN STATUS SAKELAR GLOBAL SEBELUM FORMULIR DIKIRIM (TEKS JAUH LEBIH FORMAL)
+        # PENGECEKAN STATUS SAKELAR GLOBAL SEBELUM FORMULIR DIKIRIM
         if not loa_system_active:
             return await interaction.response.send_message(
                 "We regret to inform you that you are unable to submit a Leave of Absence (LOA) request at this time, "
@@ -286,10 +286,10 @@ async def toggle_loa_system(ctx, status: str = None):
 
     if status.lower() == "off":
         loa_system_active = False
-        await ctx.send("The LOA system has been disabled.")
+        await ctx.send("The Leave of Absence (LOA) system has been temporarily disabled. Please await further notice regarding its reactivation.")
     elif status.lower() == "on":
         loa_system_active = True
-        await ctx.send("The LOA system has been enabled.")
+        await ctx.send("The Leave of Absence (LOA) system has been reactivated and is now available for use. Eligible members may proceed with submitting their LOA requests in accordance with the established procedures.")
     else:
         await ctx.send("❌ Invalid format. Use `!loasystem on` or `!loasystem off`.")
 
