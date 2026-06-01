@@ -1,5 +1,6 @@
 import sys
 import subprocess
+import re
 
 # ====================================================================
 # AUTO-INSTALLER GUARD
@@ -115,7 +116,7 @@ class AdminApprovalView(discord.ui.View):
         super().__init__(timeout=None)
         self.member_id = member_id
         self.data_form = data_form
-    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_v3")
+    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_v6")
     async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         guild = interaction.guild
@@ -134,7 +135,7 @@ class AdminApprovalView(discord.ui.View):
             loa_data[str(self.member_id)] = {"username": self.data_form["username"], "end_date": self.data_form["end_date"]}
             save_loa_data(loa_data)
 
-    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_v3")
+    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_v6")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         for child in self.children: child.disabled = True
         await interaction.response.send_modal(RejectReasonModal(member_id=self.member_id, interaction_admin=interaction, view_approval=self))
@@ -160,7 +161,7 @@ class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
 
 class LOAButtonView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
-    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_v3")
+    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_v6")
     async def create_loa_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not loa_system_active: return await interaction.response.send_message("The LOA system has been temporarily disabled.", ephemeral=True)
         await interaction.response.send_modal(LOAForm())
@@ -173,6 +174,7 @@ class LOAButtonView(discord.ui.View):
 async def send_automated_strict_rp_template(target_channel_id, host_name, map_author, aorp_loc, server_code):
     channel = bot.get_channel(target_channel_id)
     if channel:
+        # PERBAIKAN UTAMA: Struktur string dipecah secara linear agar aman dari pemotongan API Discord
         template = (
             f"# **RiseCountry 🔴 STRICT RP**\n"
             f"**AORP : {aorp_loc}**\n"
@@ -225,10 +227,7 @@ async def send_automated_strict_rp_template(target_channel_id, host_name, map_au
             f"Game Link :\n"
             f"https://www.roblox.com/games/6911148748/UPDATE-Car-Driving-Indonesia"
         )
-        await channel.send(template)
-
-# Storage temporary untuk menampung data Page 1 sebelum digabung ke Page 2
-session_wizard_cache = {}
+        await channel.send(content=template)
 
 class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Technical & Venue"):
     f_staff_join = discord.ui.TextInput(
@@ -267,7 +266,6 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Technical & Venu
         if selected_server not in SERVER_CHANNELS:
             return await interaction.followup.send("❌ Submission aborted. Target Channel must be 1, 2, or 3.", ephemeral=True)
 
-        # Validasi format jam staff join (HH.MM atau HH:MM)
         staff_time_raw = self.f_staff_join.value.strip().replace(":", ".")
         try:
             time_clean = "".join([c for c in staff_time_raw if c.isdigit() or c == '.'])
@@ -275,7 +273,11 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Technical & Venu
         except Exception:
             return await interaction.followup.send("❌ Submission aborted. Staff Join Time must follow the HH.MM format.", ephemeral=True)
 
-        # Membangun Teks Pengumuman Utama Sesuai Koreksi User
+        open_server_time = staff_time_raw  
+        match = re.search(r'(?:open\s+server|open)\s*:\s*([\d[:\.]+)', self.cached_data['schedules'].lower())
+        if match:
+            open_server_time = match.group(1).strip().replace(":", ".")
+
         announcement_text = (
             f"__**Rise Country**__\n"
             f" \n"
@@ -289,7 +291,7 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Technical & Venu
             f"Staff Join Time: {staff_time_raw}\n"
             f"End Session: {self.cached_data['end_time']}\n"
             f" \n"
-            f"Session time : {staff_time_raw} - {self.f_staff_join.value.strip()} (GMT +7)\n"
+            f"Session time : {open_server_time} - {self.cached_data['end_time']} (GMT +7)\n"
             f" \n"
             f"-# Note :\n"
             f"-# - Minimum requirement: 5 staff\n"
@@ -302,28 +304,29 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Technical & Venu
             await announcement_channel.send(announcement_text)
             chosen_channel_id = SERVER_CHANNELS[selected_server]
 
-            # Otomatisasi Penjadwalan Template
             scheduler.add_job(
                 send_automated_strict_rp_template,
                 'cron',
                 hour=hour,
                 minute=minute,
                 args=[chosen_channel_id, self.cached_data['host'], self.cached_data['map_author'], self.f_aorp.value.strip(), self.f_code.value.strip()],
-                id=f"strict_job_v3_{interaction.id}"
+                id=f"strict_job_v6_{interaction.id}"
             )
             
-            # Hapus pesan trigger agar bersih
             try:
                 await interaction.message.delete()
             except Exception:
                 pass
-                
-            await interaction.followup.send(
-                f"✅ **Session Created Successfully!**\n"
-                f"• Announcement posted in main channel.\n"
-                f"• Strict RP template scheduled for automated delivery to Server {selected_server} at {staff_time_raw}.", 
-                ephemeral=True
+            
+            success_embed = discord.Embed(
+                title="✨ Session Created Successfully!",
+                description=(
+                    f"• Announcement posted in main channel.\n"
+                    f"• Strict RP template scheduled for automated delivery to **Server {selected_server}** at **{staff_time_raw}**."
+                ),
+                color=discord.Color(0x0d50b8)
             )
+            await interaction.followup.send(embed=success_embed, ephemeral=True)
         else:
             await interaction.followup.send("❌ Configuration Error: Main announcement channel could not be resolved.", ephemeral=True)
 
@@ -360,7 +363,6 @@ class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Identity & Sched
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Simpan data page 1 ke memory cache sementara
         cached_data = {
             "host": self.f_host.value.strip(),
             "map_author": self.f_map.value.strip(),
@@ -369,19 +371,20 @@ class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Identity & Sched
             "end_time": self.f_end.value.strip()
         }
         
-        # Kirim tombol konfirmasi perantara menuju Page 2 agar transisi aman tanpa interaksi gagal
+        transition_embed = discord.Embed(
+            title="📥 Page 1 Complete!",
+            description="Click the button below to proceed and finalize the technical configurations on Page 2.",
+            color=discord.Color(0x0d50b8)
+        )
+        
         class TransitionView(discord.ui.View):
             def __init__(self):
                 super().__init__(timeout=60)
-            @discord.ui.button(label="Proceed to Page 2 (Technical Details)", style=discord.ButtonStyle.primary, custom_id="btn_goto_p2")
+            @discord.ui.button(label="Proceed to Page 2", style=discord.ButtonStyle.secondary, custom_id="btn_goto_p2_v6")
             async def go_page2(self, inner_interaction: discord.Interaction, button: discord.ui.Button):
                 await inner_interaction.response.send_modal(SessionPlannerPage2Modal(cached_data=cached_data))
 
-        await interaction.response.send_message(
-            content="🔹 **Page 1 Complete!** Click the secure button below to finalize technical details on Page 2.",
-            view=TransitionView(),
-            ephemeral=True
-        )
+        await interaction.response.send_message(embed=transition_embed, view=TransitionView(), ephemeral=True)
 
 @bot.command(name="setsession")
 async def start_session_planner(ctx):
@@ -391,21 +394,22 @@ async def start_session_planner(ctx):
     if not has_permission: 
         return
 
-    instruction_text = (
-        "### 📑 Rise Country - Session Creation Wizard\n"
-        "Click the action button below to access **Page 1** of the professional session formulation wizard."
+    trigger_embed = discord.Embed(
+        title="📑 Session Creation Portal",
+        description="Click the configuration button below to access **Page 1** of the professional session formulation wizard.",
+        color=discord.Color(0x0d50b8)
     )
     
     class WizardTriggerView(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=60)
-        @discord.ui.button(label="Begin Session Setup (Page 1)", style=discord.ButtonStyle.success, custom_id="btn_trigger_p1_final")
+        @discord.ui.button(label="Create Session Plan", style=discord.ButtonStyle.secondary, custom_id="btn_trigger_p1_v6")
         async def open_p1(self, interaction: discord.Interaction, button: discord.ui.Button):
             if interaction.user.id != ctx.author.id:
                 return await interaction.response.send_message("Authorization denied.", ephemeral=True)
             await interaction.response.send_modal(SessionPlannerPage1Modal())
 
-    await ctx.send(instruction_text, view=WizardTriggerView())
+    await ctx.send(embed=trigger_embed, view=WizardTriggerView())
 
 # ====================================================================
 # MANAGEMENT COMMANDS & ERRORS
