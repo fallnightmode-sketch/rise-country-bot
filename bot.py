@@ -259,10 +259,12 @@ class LOAButtonView(discord.ui.View):
 
     @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa")
     async def create_loa_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # PENGECEKAN STATUS SAKELAR GLOBAL SEBELUM FORMULIR DIKIRIM
+        # PENGECEKAN STATUS SAKELAR GLOBAL SEBELUM FORMULIR DIKIRIM (TEKS JAUH LEBIH FORMAL)
         if not loa_system_active:
             return await interaction.response.send_message(
-                "🔒 **Sorry, the LOA Submission System is currently disabled by the Administration.** Please try again later.", 
+                "We regret to inform you that you are unable to submit a Leave of Absence (LOA) request at this time, "
+                "as the LOA system has been temporarily disabled by the Executive Directorate. Kindly wait until the "
+                "system is reactivated before submitting your request. Thank you for your understanding.", 
                 ephemeral=True
             )
         await interaction.response.send_modal(LOAForm())
