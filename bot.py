@@ -124,7 +124,7 @@ class RejectReasonModal(discord.ui.Modal, title="LOA Rejection Reason"):
         embed = self.interaction_admin.message.embeds[0]
         embed.color = discord.Color.red()
         embed.title = "LOA REQUEST - REJECTED"
-        embed.add_field(name="Rejection Reason", value=self.reason.value, inline=False)
+        embed.add_field(name="Reason for Rejection", value=self.reason.value, inline=False)
         embed.set_footer(text=f"Rejected by: {interaction.user.name}")
         
         await self.interaction_admin.message.edit(embed=embed, view=self.view_approval)
@@ -276,25 +276,25 @@ async def toggle_loa_system(ctx, status: str = None):
     global loa_system_active
 
     if status is None:
-        current_status = "🟢 ACTIVE (Menerima LOA)" if loa_system_active else "🔴 DISABLED (LOA Ditutup)"
+        current_status = "ENABLED" if loa_system_active else "DISABLED"
         return await ctx.send(
-            f"⚙️ **Sistem Kontrol LOA:**\nStatus saat ini: **{current_status}**\n"
-            f"Gunakan `!loasystem off` untuk menutup atau `!loasystem on` untuk membuka portal pendaftaran."
+            f"⚙️ **LOA System Status:** `{current_status}`\n"
+            f"Use `!loasystem off` to disable or `!loasystem on` to enable the portal."
         )
 
     if status.lower() == "off":
         loa_system_active = False
-        await ctx.send("🛑 **Portal LOA telah DIMATIKAN.** Anggota/Staff tidak akan bisa membuka formulir pendaftaran untuk sementara waktu.")
+        await ctx.send("The LOA system has been disabled.")
     elif status.lower() == "on":
         loa_system_active = True
-        await ctx.send("✅ **Portal LOA telah DINYALAKAN kembali.** Anggota/Staff sekarang bisa mendaftar seperti biasa.")
+        await ctx.send("The LOA system has been enabled.")
     else:
-        await ctx.send("❌ Format salah! Gunakan `!loasystem on` atau `!loasystem off`.")
+        await ctx.send("❌ Invalid format. Use `!loasystem on` or `!loasystem off`.")
 
 @toggle_loa_system.error
 async def loasystem_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ Kamu tidak memiliki izin (Administrator) untuk mengubah status sistem portal LOA.")
+        await ctx.send("❌ You do not have the required permissions (Administrator) to toggle the LOA system status.")
 
 # ====================================================================
 # MAIN APPLICATION EVENTS
