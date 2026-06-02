@@ -34,8 +34,10 @@ ID_ROLE_LOA = 1469270847905730590
 GUILD_ID = 1351182942625337378            
 DATA_FILE = "loa_data.json"
 
+# Channel Utama untuk Pengumuman Sesi & Format Staff Join
 ID_CHANNEL_ANNOUNCEMENT = 1400173631421546620 
 
+# Target 3 Channel untuk Template Strict RP (Open Server)
 SERVER_CHANNELS = {
     "1": 1351207506612846638,
     "2": 1351210046599462945,
@@ -65,7 +67,7 @@ def save_loa_data(data):
         json.dump(data, f, indent=4)
 
 # ====================================================================
-# AUTOMATIC CHECKER TASK (RUNS EVERY HOUR)
+# AUTOMATIC CHECKER TASK FOR LOA
 # ====================================================================
 @tasks.loop(hours=1.0)
 async def check_expired_loa():
@@ -116,7 +118,7 @@ class AdminApprovalView(discord.ui.View):
         super().__init__(timeout=None)
         self.member_id = member_id
         self.data_form = data_form
-    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_v8")
+    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_v9")
     async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         guild = interaction.guild
@@ -135,7 +137,7 @@ class AdminApprovalView(discord.ui.View):
             loa_data[str(self.member_id)] = {"username": self.data_form["username"], "end_date": self.data_form["end_date"]}
             save_loa_data(loa_data)
 
-    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_v8")
+    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_v9")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         for child in self.children: child.disabled = True
         await interaction.response.send_modal(RejectReasonModal(member_id=self.member_id, interaction_admin=interaction, view_approval=self))
@@ -161,20 +163,31 @@ class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
 
 class LOAButtonView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
-    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_v8")
+    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_v9")
     async def create_loa_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not loa_system_active: return await interaction.response.send_message("The LOA system has been temporarily disabled.", ephemeral=True)
         await interaction.response.send_modal(LOAForm())
 
 
 # ====================================================================
-# TWO-PAGE PROFESSIONAL ROLEPLAY SESSION PLANNER WITH STAFF JOIN SCHEDULER
+# AUTOMATED SCHEDULER EXECUTIONS
 # ====================================================================
 
-async def send_automated_strict_rp_template(target_channel_id, host_name, map_author, aorp_loc, server_code):
+# Pemicu Otomatis 1: Mengirim info singkat [Code] & [AORP] saat jam STAFF JOIN
+async def send_staff_join_reminder(aorp_loc, server_code):
+    channel = bot.get_channel(ID_CHANNEL_ANNOUNCEMENT)
+    if channel:
+        reminder_text = (
+            f"📢 **Staff Join Reminder!**\n"
+            f"**AORP:** {aorp_loc}\n"
+            f"**Server Code:** || {server_code} ||"
+        )
+        await channel.send(content=reminder_text)
+
+# Pemicu Otomatis 2: Mengirim Template Panjang STRICT RP saat jam OPEN SERVER
+async def send_open_server_strict_template(target_channel_id, host_name, map_author, aorp_loc, server_code):
     channel = bot.get_channel(target_channel_id)
     if channel:
-        # Perbaikan struktur string linear untuk memastikan data terbaca utuh tanpa terpotong API Discord
         template = (
             f"# **RiseCountry 🔴 STRICT RP**\n"
             f"**AORP : {aorp_loc}**\n"
@@ -229,71 +242,76 @@ async def send_automated_strict_rp_template(target_channel_id, host_name, map_au
         )
         await channel.send(content=template)
 
-class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Technical & Venue"):
-    f_staff_join = discord.ui.TextInput(
-        label="5. Staff Join Time",
-        placeholder="Please enter the exact time for staff assembly (e.g., 20.30)",
-        style=discord.TextStyle.short,
-        required=True
+
+# ====================================================================
+# TWO-PAGE MODAL SESSION PLANNER SYSTEM
+# ====================================================================
+
+class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestones & Venue"):
+    f_sts = discord.ui.TextInput(
+        label="3) STS Time", placeholder="Example: 21.05", style=discord.TextStyle.short, required=True
+    )
+    f_rp_start = discord.ui.TextInput(
+        label="4) Roleplay Start Time", placeholder="Example: 21.10", style=discord.TextStyle.short, required=True
+    )
+    f_end = discord.ui.TextInput(
+        label="5) End Session Time", placeholder="Example: 23.30", style=discord.TextStyle.short, required=True
     )
     f_code = discord.ui.TextInput(
-        label="6. Server Code",
-        placeholder="Provide the designated Private Server link/code identifier",
-        style=discord.TextStyle.short,
-        required=True
-    )
-    f_aorp = discord.ui.TextInput(
-        label="7. AORP Region / City",
-        placeholder="Enter the targeted city region (e.g., Bekasi, Bandung, Jakarta)",
-        style=discord.TextStyle.short,
-        required=True
+        label="Server Private Code", placeholder="Enter server link or code text", style=discord.TextStyle.short, required=True
     )
     f_channel = discord.ui.TextInput(
-        label="8. Channel Number",
-        placeholder="Select target server channel (Type only: 1, 2, or 3)",
-        style=discord.TextStyle.short,
-        required=True
+        label="Target Strict RP Channel Number", placeholder="Type only: 1, 2, or 3", style=discord.TextStyle.short, required=True
     )
 
-    def __init__(self, cached_data):
+    def __init__(self, cached_page1, aorp_loc):
         super().__init__()
-        self.cached_data = cached_data
+        self.cached_page1 = cached_page1
+        self.aorp_loc = aorp_loc
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
         selected_server = self.f_channel.value.strip()
         if selected_server not in SERVER_CHANNELS:
-            return await interaction.followup.send("❌ Submission aborted. Target Channel must be 1, 2, or 3.", ephemeral=True)
+            return await interaction.followup.send("❌ Submission aborted. Channel option must be 1, 2, or 3.", ephemeral=True)
 
-        # Mengambil jam Staff Join Time untuk eksekusi Scheduler otomatis
-        staff_time_raw = self.f_staff_join.value.strip().replace(":", ".")
+        # --- PARSING JAM STAFF JOIN ---
+        staff_raw = self.cached_page1["staff_join"].replace(":", ".")
         try:
-            time_clean = "".join([c for c in staff_time_raw if c.isdigit() or c == '.'])
-            hour, minute = map(int, time_clean.split('.'))
+            staff_clean = "".join([c for c in staff_raw if c.isdigit() or c == '.'])
+            s_hour, s_minute = map(int, staff_clean.split('.'))
         except Exception:
-            return await interaction.followup.send("❌ Submission aborted. Staff Join Time must follow the HH.MM format.", ephemeral=True)
+            return await interaction.followup.send("❌ Formatting error in Staff Join Time (Use HH.MM format).", ephemeral=True)
 
-        # Mencari jam "Open Server" secara otomatis dari jadwal Halaman 1
-        open_server_time = staff_time_raw  
-        match = re.search(r'(?:open\s+server|open)\s*:\s*([\d[:\.]+)', self.cached_data['schedules'].lower())
-        if match:
-            open_server_time = match.group(1).strip().replace(":", ".")
+        # --- PARSING JAM OPEN SERVER ---
+        open_raw = self.cached_page1["open_server"].replace(":", ".")
+        try:
+            open_clean = "".join([c for c in open_raw if c.isdigit() or c == '.'])
+            o_hour, o_minute = map(int, open_clean.split('.'))
+        except Exception:
+            return await interaction.followup.send("❌ Formatting error in Open Server Time (Use HH.MM format).", ephemeral=True)
+
+        # --- BUILD TEXT JADWAL UTAMA ---
+        # Mengotomatisasi poin 6) Session Time: [Jam Open Server] - [Jam End Session]
+        session_time_computed = f"{self.cached_page1['open_server']} - {self.f_end.value.strip()}"
 
         announcement_text = (
             f"__**Rise Country**__\n"
             f" \n"
-            f"{self.cached_data['host']}\n"
-            f"{self.cached_data['day_date']}\n"
+            f"Host : {self.cached_page1['host']}\n"
+            f"Day, Date : {self.cached_page1['day_date']}\n"
             f"-# <@&1354869839692562523> | @everyone\n"
             f" \n"
             f"__**Schedule**__\n"
             f" \n"
-            f"{self.cached_data['schedules']}\n"
-            f"Staff Join Time: {staff_time_raw}\n"
-            f"End Session: {self.cached_data['end_time']}\n"
+            f"Open Server : {self.cached_page1['open_server']}\n"
+            f"STS : {self.f_sts.value.strip()}\n"
+            f"Roleplay Start : {self.f_rp_start.value.strip()}\n"
+            f"Staff Join Time : {self.cached_page1['staff_join']}\n"
+            f"End Session : {self.f_end.value.strip()}\n"
             f" \n"
-            f"Session time : {open_server_time} - {self.cached_data['end_time']} (GMT +7)\n"
+            f"Session time : {session_time_computed} (GMT +7)\n"
             f" \n"
             f"-# Note :\n"
             f"-# - Minimum requirement: 5 staff\n"
@@ -303,113 +321,111 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Technical & Venu
 
         announcement_channel = bot.get_channel(ID_CHANNEL_ANNOUNCEMENT)
         if announcement_channel:
+            # 1. Kirim Pengumuman Utama Secara Instan
             await announcement_channel.send(announcement_text)
-            chosen_channel_id = SERVER_CHANNELS[selected_server]
 
-            # PENJADWALAN KEMBALI KE JAM STAFF JOIN TIME Sesuai Koreksi Anda
+            # 2. Jadwalkan Pengiriman Pengingat [Code] saat jam STAFF JOIN
             scheduler.add_job(
-                send_automated_strict_rp_template,
+                send_staff_join_reminder,
                 'cron',
-                hour=hour,
-                minute=minute,
-                args=[chosen_channel_id, self.cached_data['host'], self.cached_data['map_author'], self.f_aorp.value.strip(), self.f_code.value.strip()],
-                id=f"strict_job_v8_{interaction.id}"
+                hour=s_hour,
+                minute=s_minute,
+                args=[self.aorp_loc, self.f_code.value.strip()],
+                id=f"staff_join_job_{interaction.id}"
+            )
+
+            # 3. Jadwalkan Pengiriman Template Panjang STRICT RP saat jam OPEN SERVER
+            chosen_channel_id = SERVER_CHANNELS[selected_server]
+            scheduler.add_job(
+                send_open_server_strict_template,
+                'cron',
+                hour=o_hour,
+                minute=o_minute,
+                args=[chosen_channel_id, self.cached_page1['host'], self.cached_page1['map_author'], self.aorp_loc, self.f_code.value.strip()],
+                id=f"open_server_job_{interaction.id}"
             )
             
-            try:
-                await interaction.message.delete()
-            except Exception:
-                pass
+            try: await interaction.message.delete()
+            except Exception: pass
             
             success_embed = discord.Embed(
-                title="✨ Session Created Successfully!",
+                title="✨ Session Automated Perfectly!",
                 description=(
-                    f"• Announcement posted in main channel.\n"
-                    f"• Strict RP template scheduled for automated delivery to **Server {selected_server}** at **{staff_time_raw}** (Staff Join Time)."
+                    f"• **Main Announcement** posted instantly.\n"
+                    f"• **Staff Join Reminder** scheduled at **{self.cached_page1['staff_join']}** (Main Channel).\n"
+                    f"• **Strict RP Template** scheduled at **{self.cached_page1['open_server']}** (Server Channel {selected_server})."
                 ),
                 color=discord.Color(0x0d50b8)
             )
             await interaction.followup.send(embed=success_embed, ephemeral=True)
         else:
-            await interaction.followup.send("❌ Configuration Error: Main announcement channel could not be resolved.", ephemeral=True)
+            await interaction.followup.send("❌ Channel Configuration Error.", ephemeral=True)
 
-class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Identity & Schedule"):
+
+class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Basic & Timing Info"):
     f_host = discord.ui.TextInput(
-        label="1. Host Server",
-        placeholder="State the official designated host identity name",
-        style=discord.TextStyle.short,
-        required=True
+        label="Host Server Name", placeholder="e.g. @ Name", style=discord.TextStyle.short, required=True
     )
     f_map = discord.ui.TextInput(
-        label="2. Map Author",
-        placeholder="Provide credit declaration for the map developer",
-        style=discord.TextStyle.short,
-        required=True
+        label="Map Author Credit", placeholder="e.g. @ Name", style=discord.TextStyle.short, required=True
     )
     f_day_date = discord.ui.TextInput(
-        label="3. Day, Date, and Time Session",
-        placeholder="Format standard example: Tuesday, 26 May 2026 at 21.00",
-        style=discord.TextStyle.short,
-        required=True
+        label="Day & Date Session", placeholder="e.g. Tuesday, 26 May 2026", style=discord.TextStyle.short, required=True
     )
-    f_schedules = discord.ui.TextInput(
-        label="4. Schedule Milestones",
-        placeholder="Open Server: 21.15\nSTS: 21.20\nRoleplay Start: 21.25",
-        style=discord.TextStyle.long,
-        required=True
+    f_staff = discord.ui.TextInput(
+        label="1) Staff Join Time", placeholder="e.g. 21.10", style=discord.TextStyle.short, required=True
     )
-    f_end = discord.ui.TextInput(
-        label="4b. End Session Time",
-        placeholder="Specify session closure time target (e.g., 23.30)",
-        style=discord.TextStyle.short,
-        required=True
+    f_open = discord.ui.TextInput(
+        label="2) Open Server Time", placeholder="e.g. 21.15", style=discord.TextStyle.short, required=True
+    )
+    f_aorp = discord.ui.TextInput(
+        label="AORP Location / City", placeholder="e.g. Bandung", style=discord.TextStyle.short, required=True
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        cached_data = {
+        cached_page1 = {
             "host": self.f_host.value.strip(),
             "map_author": self.f_map.value.strip(),
             "day_date": self.f_day_date.value.strip(),
-            "schedules": self.f_schedules.value.strip(),
-            "end_time": self.f_end.value.strip()
+            "staff_join": self.f_staff.value.strip(),
+            "open_server": self.f_open.value.strip()
         }
+        aorp_loc = self.f_aorp.value.strip()
         
         transition_embed = discord.Embed(
-            title="📥 Page 1 Complete!",
-            description="Click the button below to proceed and finalize the technical configurations on Page 2.",
+            title="📥 Page 1 Captured!",
+            description="Proceed to Page 2 to input remaining timestamps (STS, RP Start, End) and target venue details.",
             color=discord.Color(0x0d50b8)
         )
         
         class TransitionView(discord.ui.View):
-            def __init__(self):
-                super().__init__(timeout=60)
-            @discord.ui.button(label="Proceed to Page 2", style=discord.ButtonStyle.secondary, custom_id="btn_goto_p2_v8")
+            def __init__(self): super().__init__(timeout=60)
+            @discord.ui.button(label="Proceed to Page 2", style=discord.ButtonStyle.secondary, custom_id="btn_to_p2_final")
             async def go_page2(self, inner_interaction: discord.Interaction, button: discord.ui.Button):
-                await inner_interaction.response.send_modal(SessionPlannerPage2Modal(cached_data=cached_data))
+                await inner_interaction.response.send_modal(SessionPlannerPage2Modal(cached_page1=cached_page1, aorp_loc=aorp_loc))
 
         await interaction.response.send_message(embed=transition_embed, view=TransitionView(), ephemeral=True)
+
 
 @bot.command(name="setsession")
 async def start_session_planner(ctx):
     user_roles = [role.id for role in ctx.author.roles]
     has_permission = ctx.author.guild_permissions.administrator or any(role_id in user_roles for role_id in ALLOWED_ROLE_SESSION_IDS)
     
-    if not has_permission: 
-        return
+    if not has_permission: return
 
     trigger_embed = discord.Embed(
-        title="📑 Session Creation Portal",
-        description="Click the configuration button below to access **Page 1** of the professional session formulation wizard.",
+        title="📑 Session Scheduling Portal",
+        description="Click the layout planner button down below to configure all structured milestone times.",
         color=discord.Color(0x0d50b8)
     )
     
     class WizardTriggerView(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=60)
-        @discord.ui.button(label="Create Session Plan", style=discord.ButtonStyle.secondary, custom_id="btn_trigger_p1_v8")
+        def __init__(self): super().__init__(timeout=60)
+        @discord.ui.button(label="Open Planner Form", style=discord.ButtonStyle.secondary, custom_id="btn_run_p1_final")
         async def open_p1(self, interaction: discord.Interaction, button: discord.ui.Button):
             if interaction.user.id != ctx.author.id:
-                return await interaction.response.send_message("Authorization denied.", ephemeral=True)
+                return await interaction.response.send_message("Unauthorized user interaction.", ephemeral=True)
             await interaction.response.send_modal(SessionPlannerPage1Modal())
 
     await ctx.send(embed=trigger_embed, view=WizardTriggerView())
@@ -447,10 +463,10 @@ async def on_ready():
     bot.add_view(LOAButtonView())
     if not check_expired_loa.is_running(): check_expired_loa.start()
     if not scheduler.running: scheduler.start()
-    print(f"System Active! {bot.user} is operational.")
+    print(f"System Active! {bot.user} is fully calibrated.")
 
 token = os.getenv('DISCORD_TOKEN')
 if token:
     bot.run(token)
 else:
-    print("ERROR: DISCORD_TOKEN variable is completely missing from Railway dashboard configuration.")
+    print("ERROR: DISCORD_TOKEN is missing.")
