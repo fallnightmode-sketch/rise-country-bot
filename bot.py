@@ -3,14 +3,16 @@ import subprocess
 import re
 
 # ====================================================================
-# AUTO-INSTALLER GUARD
+# AUTO-INSTALLER GUARD WITH pytz FOR TIMEZONE CONTROL
 # ====================================================================
 try:
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    import pytz
 except ModuleNotFoundError:
-    print("Mendapati 'apscheduler' belum terpasang. Menginstal secara otomatis...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "apscheduler==3.10.4"])
+    print("Mendapati dependensi belum lengkap. Menginstal secara otomatis...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "apscheduler==3.10.4", "pytz"])
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    import pytz
 
 import discord
 from discord.ext import commands, tasks
@@ -24,7 +26,10 @@ intents.guilds = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-scheduler = AsyncIOScheduler()
+
+# Mengunci Scheduler agar berjalan di Waktu Indonesia Barat (WIB)
+JAKARTA_TZ = pytz.timezone("Asia/Jakarta")
+scheduler = AsyncIOScheduler(timezone=JAKARTA_TZ)
 
 # ====================================================================
 # CONFIGURATION
@@ -76,7 +81,7 @@ async def check_expired_loa():
     role_loa = guild.get_role(ID_ROLE_LOA)
     if not role_loa: return
     loa_data = load_loa_data()
-    now = datetime.now()
+    now = datetime.now(JAKARTA_TZ)
     updated = False
     for member_id_str, details in list(loa_data.items()):
         try:
@@ -118,7 +123,7 @@ class AdminApprovalView(discord.ui.View):
         super().__init__(timeout=None)
         self.member_id = member_id
         self.data_form = data_form
-    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_v9")
+    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_v10")
     async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         guild = interaction.guild
@@ -137,7 +142,7 @@ class AdminApprovalView(discord.ui.View):
             loa_data[str(self.member_id)] = {"username": self.data_form["username"], "end_date": self.data_form["end_date"]}
             save_loa_data(loa_data)
 
-    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_v9")
+    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_v10")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         for child in self.children: child.disabled = True
         await interaction.response.send_modal(RejectReasonModal(member_id=self.member_id, interaction_admin=interaction, view_approval=self))
@@ -163,7 +168,7 @@ class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
 
 class LOAButtonView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
-    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_v9")
+    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_v10")
     async def create_loa_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not loa_system_active: return await interaction.response.send_message("The LOA system has been temporarily disabled.", ephemeral=True)
         await interaction.response.send_modal(LOAForm())
@@ -293,7 +298,6 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestones & Ven
             return await interaction.followup.send("❌ Formatting error in Open Server Time (Use HH.MM format).", ephemeral=True)
 
         # --- BUILD TEXT JADWAL UTAMA ---
-        # Mengotomatisasi poin 6) Session Time: [Jam Open Server] - [Jam End Session]
         session_time_computed = f"{self.cached_page1['open_server']} - {self.f_end.value.strip()}"
 
         announcement_text = (
@@ -352,8 +356,8 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestones & Ven
                 title="✨ Session Automated Perfectly!",
                 description=(
                     f"• **Main Announcement** posted instantly.\n"
-                    f"• **Staff Join Reminder** scheduled at **{self.cached_page1['staff_join']}** (Main Channel).\n"
-                    f"• **Strict RP Template** scheduled at **{self.cached_page1['open_server']}** (Server Channel {selected_server})."
+                    f"• **Staff Join Reminder** scheduled at **{self.cached_page1['staff_join']} WIB** (Main Channel).\n"
+                    f"• **Strict RP Template** scheduled at **{self.cached_page1['open_server']} WIB** (Server Channel {selected_server})."
                 ),
                 color=discord.Color(0x0d50b8)
             )
@@ -463,7 +467,7 @@ async def on_ready():
     bot.add_view(LOAButtonView())
     if not check_expired_loa.is_running(): check_expired_loa.start()
     if not scheduler.running: scheduler.start()
-    print(f"System Active! {bot.user} is fully calibrated.")
+    print(f"System Active! {bot.user} is fully calibrated on Asia/Jakarta timezone.")
 
 token = os.getenv('DISCORD_TOKEN')
 if token:
