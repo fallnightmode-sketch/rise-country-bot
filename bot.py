@@ -35,7 +35,7 @@ scheduler = AsyncIOScheduler(timezone=JAKARTA_TZ)
 # CONFIGURATION
 # ====================================================================
 GUILD_ID = 1351182942625337378            # ID Server Resmi Rise Country
-ID_CHANNEL_LOG_LOA = 1510642659776266442  
+ID_CHANNEL_LOG_LOA = 1510642659776266442  # Channel #loa-approval
 ID_ROLE_LOA = 1469270847905730590         
 DATA_FILE = "loa_data.json"
 
@@ -93,7 +93,19 @@ async def check_expired_loa():
                 if member and role_loa in member.roles:
                     try:
                         await member.remove_roles(role_loa)
-                        embed_dm = discord.Embed(title="Notice of LOA Termination", color=discord.Color(0x0d50b8))
+                        
+                        # DM Notifikasi Expired Sesuai Standar Gambar 2
+                        embed_dm = discord.Embed(
+                            title="Notice of LOA Termination",
+                            description=(
+                                f"Hello {member.mention},\n\n"
+                                f"This is an official notification to inform you that your Leave of Absence (LOA) "
+                                f"period has concluded. Your LOA role has been removed, and you are expected to "
+                                f"resume your standard duties and responsibilities.\n\n"
+                                f"**Thank you for your cooperation and welcome back.**"
+                            ),
+                            color=discord.Color(0x0d50b8)
+                        )
                         await member.send(embed=embed_dm)
                     except Exception: pass
                 del loa_data[member_id_str]
@@ -102,78 +114,137 @@ async def check_expired_loa():
     if updated: save_loa_data(loa_data)
 
 # ====================================================================
-# LOA COMPONENTS
+# LOA COMPONENTS (DENGAN FORMULIR LENGKAP & NOTIFIKASI DM YANG DIPERBAIKI)
 # ====================================================================
 class RejectReasonModal(discord.ui.Modal, title="LOA Rejection Reason"):
-    reason = discord.ui.TextInput(label="Reason for Rejection", style=discord.TextStyle.long, required=True, max_length=300)
+    reason = discord.ui.TextInput(label="Reason for Rejection", placeholder="e.g. Input administrative rejection grounds here...", style=discord.TextStyle.long, required=True, max_length=300)
+    
     def __init__(self, member_id: int, interaction_admin: discord.Interaction, view_approval):
         super().__init__()
         self.member_id = member_id
         self.interaction_admin = interaction_admin
         self.view_approval = view_approval
+        
     async def on_submit(self, interaction: discord.Interaction):
         if interaction.guild_id != GUILD_ID: return
         await interaction.response.defer()
+        
+        guild = interaction.guild
+        member = guild.get_member(self.member_id)
+        
+        # Edit Embed di channel #loa-approval untuk menampilkan status REJECTED & Alasan
         embed = self.interaction_admin.message.embeds[0]
         embed.color = discord.Color.red()
         embed.title = "LOA REQUEST - REJECTED"
-        embed.add_field(name="Reason for Rejection", value=self.reason.value, inline=False)
+        embed.add_field(name="🔴 Reason for Rejection", value=self.reason.value, inline=False)
+        
         await self.interaction_admin.message.edit(embed=embed, view=self.view_approval)
+        
+        # PASTIKAN KIRIM DM KE STAFF YANG DITOLAK (Gambar 2 & 3)
+        if member:
+            try:
+                embed_dm = discord.Embed(
+                    title="Your LOA Request Has Been Rejected",
+                    description=(
+                        f"Hello {member.mention},\n\n"
+                        f"We regret to inform you that your Leave of Absence (LOA) request has been "
+                        f"reviewed and rejected by the administration.\n\n"
+                        f"**Reason for Rejection**\n"
+                        f"{self.reason.value}\n\n"
+                        f"Please contact the President or Vice President for further clarification."
+                    ),
+                    color=discord.Color.red()
+                )
+                await member.send(embed=embed_dm)
+            except Exception:
+                pass
 
 class AdminApprovalView(discord.ui.View):
     def __init__(self, member_id: int, data_form: dict):
         super().__init__(timeout=None)
         self.member_id = member_id
         self.data_form = data_form
-    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_v12")
+        
+    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_v13")
     async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.guild_id != GUILD_ID: return
         await interaction.response.defer()
         guild = interaction.guild
         member = guild.get_member(self.member_id)
+        
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.green()
         embed.title = "LOA REQUEST - APPROVED"
+        
         for child in self.children: child.disabled = True
         await interaction.message.edit(embed=embed, view=self)
+        
         if member:
             role_loa = guild.get_role(ID_ROLE_LOA)
             if role_loa:
                 try: await member.add_roles(role_loa)
                 except discord.Forbidden: pass
+            
             loa_data = load_loa_data()
             loa_data[str(self.member_id)] = {"username": self.data_form["username"], "end_date": self.data_form["end_date"]}
             save_loa_data(loa_data)
+            
+            # DM Sukses Sesuai Standar Gambar 2
+            try:
+                embed_dm = discord.Embed(
+                    title="Your LOA Request Has Been Approved",
+                    description=(
+                        f"Hello {member.mention},\n\n"
+                        f"Your Leave of Absence (LOA) request has been successfully reviewed and "
+                        f"approved by the administration.\n\n"
+                        f"**End Date**\n"
+                        f"{self.data_form['end_date']}\n\n"
+                        f"The Leave of Absence role has been assigned. System will auto-remove it once concluded."
+                    ),
+                    color=discord.Color.green()
+                )
+                await member.send(embed=embed_dm)
+            except Exception: pass
 
-    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_v12")
+    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_v13")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.guild_id != GUILD_ID: return
         for child in self.children: child.disabled = True
         await interaction.response.send_modal(RejectReasonModal(member_id=self.member_id, interaction_admin=interaction, view_approval=self))
 
 class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
-    q1 = discord.ui.TextInput(label="1. Roblox Username", required=True, max_length=50)
-    q2 = discord.ui.TextInput(label="2. Position / Department", required=True, max_length=70)
-    q3 = discord.ui.TextInput(label="3. LOA End Date Only (Format: DD/MM/YYYY)", required=True, max_length=15)
-    q4 = discord.ui.TextInput(label="4. Reason & Notes", style=discord.TextStyle.long, required=True, max_length=400)
-    q5 = discord.ui.TextInput(label="5. Reachable during leave? (Yes / No)", required=True, max_length=10)
+    q1 = discord.ui.TextInput(label="1. Roblox Username", placeholder="e.g. Doctor_BYP", required=True, max_length=50)
+    q2 = discord.ui.TextInput(label="2. Position / Department", placeholder="e.g. STAFSUS / Polisi", required=True, max_length=70)
+    q3 = discord.ui.TextInput(label="3. LOA End Date Only (Format: DD/MM/YYYY)", placeholder="e.g. 15/06/2026", required=True, max_length=15)
+    q4 = discord.ui.TextInput(label="4. Reason & Notes", placeholder="e.g. Academic exams / Urgent family matters", style=discord.TextStyle.long, required=True, max_length=400)
+    q5 = discord.ui.TextInput(label="5. Reachable during leave? (Yes / No)", placeholder="e.g. Yes, via Discord DM", required=True, max_length=300)
+    
     async def on_submit(self, interaction: discord.Interaction):
         if interaction.guild_id != GUILD_ID: return
         member = interaction.user
         await interaction.response.defer(ephemeral=True)
+        
         try: datetime.strptime(self.q3.value.strip(), "%d/%m/%Y")
         except ValueError:
-            await interaction.followup.send("Submission failed! Invalid date format.", ephemeral=True)
+            await interaction.followup.send("Submission failed! Invalid date format. Use DD/MM/YYYY.", ephemeral=True)
             return
+            
         log_channel = bot.get_channel(ID_CHANNEL_LOG_LOA)
         if log_channel:
+            # MEMPERBAIKI GAMBAR 3: Menampilkan semua detail jawaban formulir untuk Presiden/Wapres
             embed = discord.Embed(title="PENDING LOA REQUEST", description=f"Submission from {member.mention}", color=discord.Color(0x0d50b8))
+            embed.add_field(name="1. Roblox Username", value=self.q1.value, inline=True)
+            embed.add_field(name="2. Position / Department", value=self.q2.value, inline=True)
+            embed.add_field(name="3. LOA End Date", value=self.q3.value, inline=True)
+            embed.add_field(name="4. Reason & Notes", value=self.q4.value, inline=False)
+            embed.add_field(name="5. Reachable during leave?", value=self.q5.value, inline=False)
+            
             await log_channel.send(embed=embed, view=AdminApprovalView(member_id=member.id, data_form={"username": self.q1.value, "end_date": self.q3.value}))
             await interaction.followup.send("Your LOA request has been securely submitted.", ephemeral=True)
 
 class LOAButtonView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
-    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_v12")
+    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_v13")
     async def create_loa_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.guild_id != GUILD_ID: return
         if not loa_system_active: return await interaction.response.send_message("The LOA system has been temporarily disabled.", ephemeral=True)
@@ -183,7 +254,6 @@ class LOAButtonView(discord.ui.View):
 # ====================================================================
 # AUTOMATED SCHEDULER EXECUTIONS
 # ====================================================================
-
 async def send_staff_join_reminder(aorp_loc, server_code):
     channel = bot.get_channel(ID_CHANNEL_ANNOUNCEMENT)
     if channel:
@@ -258,25 +328,14 @@ async def send_open_server_strict_template(target_channel_id, host_tag, map_auth
 
 
 # ====================================================================
-# TWO-STAGE PROFESSIONAL MODAL SYSTEM
+# TWO-STAGE PROFESSIONAL MODAL SYSTEM (SESSION PLANNER)
 # ====================================================================
-
 class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Configurations"):
-    f_staff = discord.ui.TextInput(
-        label="1) Staff Join Time (HH.MM)", placeholder="e.g. 16.27", style=discord.TextStyle.short, required=True
-    )
-    f_open = discord.ui.TextInput(
-        label="2) Open Server Time (HH.MM)", placeholder="e.g. 16.28", style=discord.TextStyle.short, required=True
-    )
-    f_sts = discord.ui.TextInput(
-        label="3) STS Time (HH.MM)", placeholder="e.g. 16.29", style=discord.TextStyle.short, required=True
-    )
-    f_rp_start = discord.ui.TextInput(
-        label="4) Roleplay Start Time (HH.MM)", placeholder="e.g. 17.00", style=discord.TextStyle.short, required=True
-    )
-    f_end = discord.ui.TextInput(
-        label="5) End Session Time (HH.MM)", placeholder="e.g. 17.01", style=discord.TextStyle.short, required=True
-    )
+    f_staff = discord.ui.TextInput(label="1) Staff Join Time (HH.MM)", placeholder="e.g. 16.27", style=discord.TextStyle.short, required=True)
+    f_open = discord.ui.TextInput(label="2) Open Server Time (HH.MM)", placeholder="e.g. 16.28", style=discord.TextStyle.short, required=True)
+    f_sts = discord.ui.TextInput(label="3) STS Time (HH.MM)", placeholder="e.g. 16.29", style=discord.TextStyle.short, required=True)
+    f_rp_start = discord.ui.TextInput(label="4) Roleplay Start Time (HH.MM)", placeholder="e.g. 17.00", style=discord.TextStyle.short, required=True)
+    f_end = discord.ui.TextInput(label="5) End Session Time (HH.MM)", placeholder="e.g. 17.01", style=discord.TextStyle.short, required=True)
 
     def __init__(self, data_p1: dict):
         super().__init__()
@@ -286,44 +345,31 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
         if interaction.guild_id != GUILD_ID: return
         await interaction.response.defer(ephemeral=True)
         
-        # --- PARSING JAM STAFF JOIN ---
         staff_raw = self.f_staff.value.strip().replace(":", ".")
-        try:
-            s_hour, s_minute = map(int, "".join([c for c in staff_raw if c.isdigit() or c == '.']).split('.'))
-        except Exception:
-            return await interaction.followup.send("Failed: Invalid format for Staff Join Time. Use HH.MM configuration.", ephemeral=True)
+        try: s_hour, s_minute = map(int, "".join([c for c in staff_raw if c.isdigit() or c == '.']).split('.'))
+        except Exception: return await interaction.followup.send("Failed: Invalid format for Staff Join Time. Use HH.MM configuration.", ephemeral=True)
 
-        # --- PARSING JAM OPEN SERVER ---
         open_raw = self.f_open.value.strip().replace(":", ".")
-        try:
-            o_hour, o_minute = map(int, "".join([c for c in open_raw if c.isdigit() or c == '.']).split('.'))
-        except Exception:
-            return await interaction.followup.send("Failed: Invalid format for Open Server Time. Use HH.MM configuration.", ephemeral=True)
+        try: o_hour, o_minute = map(int, "".join([c for c in open_raw if c.isdigit() or c == '.']).split('.'))
+        except Exception: return await interaction.followup.send("Failed: Invalid format for Open Server Time. Use HH.MM configuration.", ephemeral=True)
 
         session_time_computed = f"{self.f_open.value.strip()} - {self.f_end.value.strip()}"
-
-        # Konversi nama Host menjadi Tag Identitas Aktif jika berisi ID, atau biarkan teks asli
         host_input = self.data_p1['host']
         match_id = re.search(r'\d+', host_input)
         host_tag = f"<@{match_id.group()}>" if match_id else host_input
 
         announcement_text = (
-            f"__**Rise Country**__\n"
-            f" \n"
+            f"__**Rise Country**__\n \n"
             f"{host_tag}\n"
             f"{self.data_p1['day_date']}\n"
-            f"<@&{ID_ROLE_PEMERINTAH}> | @everyone\n"
-            f" \n"
-            f"__**Schedule**__\n"
-            f" \n"
+            f"<@&{ID_ROLE_PEMERINTAH}> | @everyone\n \n"
+            f"__**Schedule**__\n \n"
             f"Open Server : {self.f_open.value.strip()}\n"
             f"STS : {self.f_sts.value.strip()}\n"
             f"Roleplay Start : {self.f_rp_start.value.strip()}\n"
             f"Staff Join Time : {self.f_staff.value.strip()}\n"
-            f"End Session : {self.f_end.value.strip()}\n"
-            f" \n"
-            f"Session time : {session_time_computed} (GMT +7)\n"
-            f" \n"
+            f"End Session : {self.f_end.value.strip()}\n \n"
+            f"Session time : {session_time_computed} (GMT +7)\n \n"
             f"Note :\n"
             f"• Minimum requirement: 5 staff\n"
             f"• Please join at the scheduled time.\n"
@@ -332,29 +378,10 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
 
         announcement_channel = bot.get_channel(ID_CHANNEL_ANNOUNCEMENT)
         if announcement_channel:
-            # 1. Kirim Pengumuman Utama Instan
             await announcement_channel.send(announcement_text)
-
-            # 2. Jadwalkan Pengingat [Code] saat jam STAFF JOIN
-            scheduler.add_job(
-                send_staff_join_reminder,
-                'cron',
-                hour=s_hour,
-                minute=s_minute,
-                args=[self.data_p1['aorp'], self.data_p1['code']],
-                id=f"sj_cron_{interaction.id}"
-            )
-
-            # 3. Jadwalkan Pengiriman Template Panjang STRICT RP saat jam OPEN SERVER
+            scheduler.add_job(send_staff_join_reminder, 'cron', hour=s_hour, minute=s_minute, args=[self.data_p1['aorp'], self.data_p1['code']], id=f"sj_cron_{interaction.id}")
             chosen_channel_id = SERVER_CHANNELS[self.data_p1['channel']]
-            scheduler.add_job(
-                send_open_server_strict_template,
-                'cron',
-                hour=o_hour,
-                minute=o_minute,
-                args=[chosen_channel_id, host_tag, self.data_p1['map_author'], self.data_p1['aorp'], self.data_p1['code']],
-                id=f"os_cron_{interaction.id}"
-            )
+            scheduler.add_job(send_open_server_strict_template, 'cron', hour=o_hour, minute=o_minute, args=[chosen_channel_id, host_tag, self.data_p1['map_author'], self.data_p1['aorp'], self.data_p1['code']], id=f"os_cron_{interaction.id}")
             
             success_embed = discord.Embed(
                 title="Scheduler Activated Successfully!",
@@ -369,9 +396,8 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
         else:
             await interaction.followup.send("Failed: Operational announcement channel configuration missing.", ephemeral=True)
 
-
 class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Identity & Parameters"):
-    f_host = discord.ui.TextInput(label="Host Name", placeholder="e.g. Mention user or type name", required=True, max_length=100)
+    f_host = discord.ui.TextInput(label="Host Name", placeholder="e.g. @PRES | Doctor_BYP", required=True, max_length=100)
     f_map = discord.ui.TextInput(label="Map Author Credit", placeholder="e.g. @PRES | Doctor_BYP", required=True, max_length=100)
     f_day_date = discord.ui.TextInput(label="Day & Date", placeholder="e.g. Wednesday, 03 June 2026", required=True, max_length=100)
     f_aorp = discord.ui.TextInput(label="AORP Location / City", placeholder="e.g. Bandung", required=True, max_length=100)
@@ -384,12 +410,9 @@ class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Identity & Param
     async def on_submit(self, interaction: discord.Interaction):
         if interaction.guild_id != GUILD_ID: return
         data_p1 = {
-            "host": self.f_host.value.strip(),
-            "map_author": self.f_map.value.strip(),
-            "day_date": self.f_day_date.value.strip(),
-            "aorp": self.f_aorp.value.strip(),
-            "code": self.f_code.value.strip(),
-            "channel": self.selected_channel
+            "host": self.f_host.value.strip(), "map_author": self.f_map.value.strip(),
+            "day_date": self.f_day_date.value.strip(), "aorp": self.f_aorp.value.strip(),
+            "code": self.f_code.value.strip(), "channel": self.selected_channel
         }
 
         class NextStageView(discord.ui.View):
@@ -399,16 +422,9 @@ class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Identity & Param
                 if inner_interaction.guild_id != GUILD_ID: return
                 await inner_interaction.response.send_modal(SessionPlannerPage2Modal(data_p1=data_p1))
 
-        transition_embed = discord.Embed(
-            description="Initial parameters recorded. Please proceed to the next stage to configure session timestamps.",
-            color=discord.Color(0x0d50b8)
-        )
+        transition_embed = discord.Embed(description="Initial parameters recorded. Please proceed to the next stage to configure session timestamps.", color=discord.Color(0x0d50b8))
         await interaction.response.send_message(embed=transition_embed, view=NextStageView(), ephemeral=True)
 
-
-# ====================================================================
-# COMPONENT: SELECT MENU FOR TARGET ROUTE OPTIMIZATION
-# ====================================================================
 class ChannelSelectComponent(discord.ui.Select):
     def __init__(self):
         options = [
@@ -416,84 +432,72 @@ class ChannelSelectComponent(discord.ui.Select):
             discord.SelectOption(label="Channel 2", value="2", description="Route strict session output to Server 2"),
             discord.SelectOption(label="Channel 3", value="3", description="Route strict session output to Server 3"),
         ]
-        super().__init__(placeholder="Select Target Strict RP Channel...", min_values=1, max_values=1, options=options, custom_id="sel_channel_v12")
+        super().__init__(placeholder="Select Target Strict RP Channel...", min_values=1, max_values=1, options=options, custom_id="sel_channel_v13")
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.guild_id != GUILD_ID: return
-        chosen = self.values[0]
-        await interaction.response.send_modal(SessionPlannerPage1Modal(selected_channel=chosen))
+        await interaction.response.send_modal(SessionPlannerPage1Modal(selected_channel=self.values[0]))
+
+class WizardTriggerView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(ChannelSelectComponent())
 
 
 # ====================================================================
 # MANAGEMENT & SECURITY COMMANDS
 # ====================================================================
-
 @bot.command(name="setsession")
 async def start_session_planner(ctx):
-    # FILTER SECURITY BARRIER: Hanya proses jika dijalankan dari dalam guild resmi Rise Country
-    if ctx.guild is None or ctx.guild.id != GUILD_ID:
-        return
-
+    if ctx.guild is None or ctx.guild.id != GUILD_ID: return
     user_roles = [role.id for role in ctx.author.roles]
     has_permission = ctx.author.guild_permissions.administrator or any(role_id in user_roles for role_id in ALLOWED_ROLE_SESSION_IDS)
     if not has_permission: return
 
-    trigger_embed = discord.Embed(
-        title="Session Scheduling Portal",
-        description="Please use the menu below to configure and manage all scheduled session milestones in accordance with operational requirements.",
-        color=discord.Color(0x0d50b8)
-    )
-    
-    class WizardTriggerView(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=None)
-            self.add_item(ChannelSelectComponent())
-
+    trigger_embed = discord.Embed(title="Session Scheduling Portal", description="Please use the menu below to configure and manage all scheduled session milestones.", color=discord.Color(0x0d50b8))
     await ctx.send(embed=trigger_embed, view=WizardTriggerView())
 
-@bot.command(name="removeloa")
+# GAMBAR 4: Command dikembalikan ke nama lama !end_loa dengan hasil rincian teks yang presisi
+@bot.command(name="end_loa")
 @commands.has_permissions(administrator=True)
 async def remove_loa_manual(ctx, member: discord.Member = None):
-    # FILTER SECURITY BARRIER: Hanya proses jika dijalankan dari dalam guild resmi Rise Country
-    if ctx.guild is None or ctx.guild.id != GUILD_ID: 
-        return
+    if ctx.guild is None or ctx.guild.id != GUILD_ID: return
 
     if member is None:
-        return await ctx.send("❌ **Error:** Mohon sebutkan staff yang ingin dihentikan LOA-nya. Contoh: `!removeloa @NamaStaff`")
+        return await ctx.send("❌ **Error:** Mohon sebutkan staff yang ingin dihentikan LOA-nya. Contoh: `!end_loa @NamaStaff` atau `!end_loa [ID]`")
 
     guild = ctx.guild
     role_loa = guild.get_role(ID_ROLE_LOA)
     
-    # 1. Hapus Role LOA dari user jika mereka memilikinya
     if role_loa and role_loa in member.roles:
-        try:
-            await member.remove_roles(role_loa)
-        except discord.Forbidden:
-            return await ctx.send(f"❌ **Error:** Bot tidak memiliki izin untuk menghapus role dari {member.mention}.")
+        try: await member.remove_roles(role_loa)
+        except discord.Forbidden: return await ctx.send(f"❌ **Error:** Bot tidak memiliki izin role untuk {member.mention}.")
     
-    # 2. Bersihkan data dari database json
     loa_data = load_loa_data()
     member_id_str = str(member.id)
     
     if member_id_str in loa_data:
         del loa_data[member_id_str]
         save_loa_data(loa_data)
-        
-        # 3. Kirim notifikasi konfirmasi sukses yang formal
-        await ctx.send(f"✅ **Success:** Status LOA untuk {member.mention} telah dihentikan secara manual dan basis data telah diperbarui.")
-        
-        # Kirim DM ke Staff yang bersangkutan secara profesional
-        try:
-            embed_dm = discord.Embed(
-                title="Notice of LOA Termination", 
-                description="Your Leave of Absence (LOA) status has been manually concluded by the administration.",
-                color=discord.Color(0x0d50b8)
-            )
-            await member.send(embed=embed_dm)
-        except Exception:
-            pass # Mengabaikan jika DM staff ditutup
-    else:
-        await ctx.send(f"ℹ️ {member.mention} tidak terdaftar memiliki data LOA aktif di dalam sistem, namun jika ia memiliki role LOA, role tersebut telah dicabut.")
+    
+    # Text balasan ringkas presisi sesuai Gambar nomor 4
+    await ctx.send(f"LOA period has been successfully terminated for **{member.display_name}**. Role removed.")
+    
+    # DM Notifikasi Konfirmasi Pengakhiran Sesuai Standar Gambar 2
+    try:
+        embed_dm = discord.Embed(
+            title="Notice of LOA Termination",
+            description=(
+                f"Hello {member.mention},\n\n"
+                f"This is an official notification to inform you that your Leave of Absence (LOA) "
+                f"period has concluded. Your LOA role has been removed, and you are expected to "
+                f"resume your standard duties and responsibilities.\n\n"
+                f"**Thank you for your cooperation and welcome back.**"
+            ),
+            color=discord.Color(0x0d50b8)
+        )
+        await member.send(embed=embed_dm)
+    except Exception: pass
 
 @bot.command(name="loasystem")
 @commands.has_permissions(administrator=True)
@@ -505,20 +509,36 @@ async def toggle_loa_system(ctx, status: str = None):
         return await ctx.send(f"⚙️ **LOA System Status:** `{current_status}`")
     if status.lower() == "off":
         loa_system_active = False
-        await ctx.send("The Leave of Absence (LOA) system has been temporarily disabled.")
+        await ctx.send("The Leave of Absence (LOA) system has been temporarily disabled. Please await further notice regarding its reactivation.")
     elif status.lower() == "on":
         loa_system_active = True
         await ctx.send("The Leave of Absence (LOA) system has been reactivated.")
 
+# GAMBAR 6 & 7: Teks deskripsi pembuka diperpanjang penuh sesuai keinginan Anda
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setup_loa(ctx):
     if ctx.guild is None or ctx.guild.id != GUILD_ID: return
-    embed = discord.Embed(title="Leave of Absence (LOA) Portal", description="Welcome to the Leave of Absence System.", color=discord.Color(0x0d50b8))
+    embed = discord.Embed(
+        title="Leave of Absence (LOA) Portal", 
+        description=(
+            "Welcome to the Leave of Absence System.\n\n"
+            "This system is intended for members who require a temporary leave from their "
+            "duties and responsibilities. Please submit your request with a clear reason and an "
+            "accurate duration of absence.\n\n"
+            "All submissions will be reviewed by the President or Vice President. Requests "
+            "containing false information or any misuse of this system may result in disciplinary "
+            "action in accordance with applicable regulations.\n\n"
+            "The outcome of your LOA request will be sent to you via Direct Message (DM) "
+            "once it has been reviewed and approved by the President or Vice President.\n\n"
+            "Thank you for your cooperation and professionalism."
+        ), 
+        color=discord.Color(0x0d50b8)
+    )
     await ctx.send(embed=embed, view=LOAButtonView())
 
 # ====================================================================
-# GLOBAL EVENTS & ERROR HANDLERS
+# GLOBAL EVENTS & ERROR HANDLERS (SOLUSI INTERACTION FAILED)
 # ====================================================================
 @bot.event
 async def on_command_error(ctx, error):
@@ -527,13 +547,14 @@ async def on_command_error(ctx, error):
 
 @bot.event
 async def on_ready():
+    # PERSISTENT REGISTRATION: Mencegah error "Interaction Failed" saat bot restart
     bot.add_view(LOAButtonView())
+    bot.add_view(WizardTriggerView()) 
+    
     if not check_expired_loa.is_running(): check_expired_loa.start()
     if not scheduler.running: scheduler.start()
-    print(f"Sistem Keamanan Aktif. {bot.user} hanya merespon Server ID: {GUILD_ID} (Rise Country).")
+    print(f"Sistem Keamanan Aktif. {bot.user} dikunci penuh di Server ID: {GUILD_ID}.")
 
 token = os.getenv('DISCORD_TOKEN')
-if token:
-    bot.run(token)
-else:
-    print("ERROR: DISCORD_TOKEN is missing.")
+if token: bot.run(token)
+else: print("ERROR: DISCORD_TOKEN is missing.")
