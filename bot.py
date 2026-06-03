@@ -123,7 +123,7 @@ class AdminApprovalView(discord.ui.View):
         super().__init__(timeout=None)
         self.member_id = member_id
         self.data_form = data_form
-    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_v11")
+    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_v12")
     async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         guild = interaction.guild
@@ -142,7 +142,7 @@ class AdminApprovalView(discord.ui.View):
             loa_data[str(self.member_id)] = {"username": self.data_form["username"], "end_date": self.data_form["end_date"]}
             save_loa_data(loa_data)
 
-    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_v11")
+    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_v12")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         for child in self.children: child.disabled = True
         await interaction.response.send_modal(RejectReasonModal(member_id=self.member_id, interaction_admin=interaction, view_approval=self))
@@ -168,7 +168,7 @@ class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
 
 class LOAButtonView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
-    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_v11")
+    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_v12")
     async def create_loa_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not loa_system_active: return await interaction.response.send_message("The LOA system has been temporarily disabled.", ephemeral=True)
         await interaction.response.send_modal(LOAForm())
@@ -182,22 +182,26 @@ async def send_staff_join_reminder(aorp_loc, server_code):
     channel = bot.get_channel(ID_CHANNEL_ANNOUNCEMENT)
     if channel:
         reminder_text = (
-            f"📢 **Staff Join Reminder!**\n"
-            f"**AORP:** {aorp_loc}\n"
-            f"**Server Code:** || {server_code} ||"
+            f"AORP: {aorp_loc}\n"
+            f"Server Code: {server_code}\n\n"
+            f"Notes:\n"
+            f"- Anda memiliki waktu 10 menit sejak kode ini dibagikan untuk join ke server, apabila Anda tidak join dalam waktu 10 menit tanpa keterangan yang jelas, Anda akan mendapatkan warning\n"
+            f"- Gunakan seragam kerja Rise Country.\n"
+            f"- Gunakan plat dinas Rise Country.\n"
+            f"- Sistem akan secara otomatis mengirim format ke Server 1, 2, dan 3 sesuai waktu yang ditentukan. Mohon untuk sudah standby di STS 5 menit sebelum waktu pembukaan server roleplay."
         )
         await channel.send(content=reminder_text)
 
-async def send_open_server_strict_template(target_channel_id, host_mention, aorp_loc, server_code):
+async def send_open_server_strict_template(target_channel_id, host_name, map_author, aorp_loc, server_code):
     channel = bot.get_channel(target_channel_id)
     if channel:
         template = (
             f"# **RiseCountry 🔴 STRICT RP**\n"
             f"**AORP : {aorp_loc}**\n"
             f"--------------------\n"
-            f"Host : {host_mention}\n"
+            f"Host : {host_name}\n"
             f"Moderator : Staff RCRP\n"
-            f"Map by : {host_mention}\n"
+            f"Map by : {map_author}\n"
             f"--------------------\n"
             f"**SERVICE CALL**\n"
             f"**911** POLISI\n"
@@ -247,101 +251,75 @@ async def send_open_server_strict_template(target_channel_id, host_mention, aorp
 
 
 # ====================================================================
-# SINGLE-PAGE ONE-CLICK SAFE MODAL SYSTEM
+# TWO-STAGE PROFESSIONAL MODAL SYSTEM
 # ====================================================================
 
-class SafeSingleSessionModal(discord.ui.Modal, title="RiseCountry Session Layout"):
-    f_timeline = discord.ui.TextInput(
-        label="Timestamps (Format: SJ, OS, STS, RP, END)",
-        placeholder="Example: 21.00, 21.05, 21.10, 21.15, 23.00",
-        style=discord.TextStyle.short,
-        required=True
+class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Configurations"):
+    f_staff = discord.ui.TextInput(
+        label="1) Staff Join Time (HH.MM)", placeholder="e.g. 16.27", style=discord.TextStyle.short, required=True
     )
-    f_aorp = discord.ui.TextInput(
-        label="AORP Location / City",
-        placeholder="Example: Jakarta / Bandung",
-        style=discord.TextStyle.short,
-        required=True
+    f_open = discord.ui.TextInput(
+        label="2) Open Server Time (HH.MM)", placeholder="e.g. 16.28", style=discord.TextStyle.short, required=True
     )
-    f_code = discord.ui.TextInput(
-        label="Server Private Code / Link",
-        placeholder="Enter server code or link here",
-        style=discord.TextStyle.short,
-        required=True
+    f_sts = discord.ui.TextInput(
+        label="3) STS Time (HH.MM)", placeholder="e.g. 16.29", style=discord.TextStyle.short, required=True
     )
-    f_channel = discord.ui.TextInput(
-        label="Target Strict RP Channel (1 / 2 / 3)",
-        placeholder="Type only numbers: 1, 2, or 3",
-        style=discord.TextStyle.short,
-        required=True
+    f_rp_start = discord.ui.TextInput(
+        label="4) Roleplay Start Time (HH.MM)", placeholder="e.g. 17.00", style=discord.TextStyle.short, required=True
     )
+    f_end = discord.ui.TextInput(
+        label="5) End Session Time (HH.MM)", placeholder="e.g. 17.01", style=discord.TextStyle.short, required=True
+    )
+
+    def __init__(self, data_p1: dict):
+        super().__init__()
+        self.data_p1 = data_p1
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
-        # Validasi Pilihan Channel
-        selected_server = self.f_channel.value.strip()
-        if selected_server not in SERVER_CHANNELS:
-            return await interaction.followup.send("❌ Cancelled! Channel option must be 1, 2, or 3.", ephemeral=True)
-
-        # Parsing isi data waktu yang dipisah koma (Kompatibel spasi)
-        times = [t.strip() for t in self.f_timeline.value.split(",")]
-        if len(times) != 5:
-            return await interaction.followup.send("❌ Error! You must fill exactly 5 timestamps separated by commas.", ephemeral=True)
-        
-        staff_join_time = times[0]
-        open_server_time = times[1]
-        sts_time = times[2]
-        rp_start_time = times[3]
-        end_session_time = times[4]
-
         # --- PARSING JAM STAFF JOIN ---
+        staff_raw = self.f_staff.value.strip().replace(":", ".")
         try:
-            sj_raw = staff_join_time.replace(":", ".")
-            s_hour, s_minute = map(int, "".join([c for c in sj_raw if c.isdigit() or c == '.']).split('.'))
+            s_hour, s_minute = map(int, "".join([c for c in staff_raw if c.isdigit() or c == '.']).split('.'))
         except Exception:
-            return await interaction.followup.send("❌ Format Error on Staff Join Time (Use HH.MM).", ephemeral=True)
+            return await interaction.followup.send("Failed: Invalid format for Staff Join Time. Use HH.MM configuration.", ephemeral=True)
 
         # --- PARSING JAM OPEN SERVER ---
+        open_raw = self.f_open.value.strip().replace(":", ".")
         try:
-            os_raw = open_server_time.replace(":", ".")
-            o_hour, o_minute = map(int, "".join([c for c in os_raw if c.isdigit() or c == '.']).split('.'))
+            o_hour, o_minute = map(int, "".join([c for c in open_raw if c.isdigit() or c == '.']).split('.'))
         except Exception:
-            return await interaction.followup.send("❌ Format Error on Open Server Time (Use HH.MM).", ephemeral=True)
+            return await interaction.followup.send("Failed: Invalid format for Open Server Time. Use HH.MM configuration.", ephemeral=True)
 
-        # Deteksi Hari & Tanggal Otomatis Saat Ini
-        now_date_str = datetime.now(JAKARTA_TZ).strftime("%A, %d %B %Y")
-        host_mention = interaction.user.mention
-
-        # Otomatisasi Session Time (Open Server - End Session)
-        session_time_computed = f"{open_server_time} - {end_session_time}"
+        session_time_computed = f"{self.f_open.value.strip()} - {self.f_end.value.strip()}"
 
         announcement_text = (
             f"__**Rise Country**__\n"
             f" \n"
-            f"Host : {host_mention}\n"
-            f"Day, Date : {now_date_str}\n"
-            f"-# <@&1354869839692562523> | @everyone\n"
+            f"{self.data_p1['host']}\n"
+            f"{self.data_p1['day_date']}\n"
+            f"@Pemerintah | @everyone\n"
             f" \n"
             f"__**Schedule**__\n"
             f" \n"
-            f"Open Server : {open_server_time}\n"
-            f"STS : {sts_time}\n"
-            f"Roleplay Start : {rp_start_time}\n"
-            f"Staff Join Time : {staff_join_time}\n"
-            f"End Session : {end_session_time}\n"
+            f"Open Server : {self.f_open.value.strip()}\n"
+            f"STS : {self.f_sts.value.strip()}\n"
+            f"Roleplay Start : {self.f_rp_start.value.strip()}\n"
+            f"Staff Join Time : {self.f_staff.value.strip()}\n"
+            f"End Session : {self.f_end.value.strip()}\n"
             f" \n"
             f"Session time : {session_time_computed} (GMT +7)\n"
             f" \n"
-            f"-# Note :\n"
-            f"-# - Minimum requirement: 5 staff\n"
-            f"-# - Please join at the scheduled time.\n"
-            f"-# - The schedule may change at any time."
+            f"Note :\n"
+            f"• Minimum requirement: 5 staff\n"
+            f"• Please join at the scheduled time.\n"
+            f"• The schedule may change at any time."
         )
 
         announcement_channel = bot.get_channel(ID_CHANNEL_ANNOUNCEMENT)
         if announcement_channel:
-            # 1. Kirim Jadwal Utama Langsung Instan
+            # 1. Kirim Pengumuman Utama Instan
             await announcement_channel.send(announcement_text)
 
             # 2. Jadwalkan Pengingat [Code] saat jam STAFF JOIN
@@ -350,36 +328,84 @@ class SafeSingleSessionModal(discord.ui.Modal, title="RiseCountry Session Layout
                 'cron',
                 hour=s_hour,
                 minute=s_minute,
-                args=[self.f_aorp.value.strip(), self.f_code.value.strip()],
-                id=f"sj_job_{interaction.id}"
+                args=[self.data_p1['aorp'], self.data_p1['code']],
+                id=f"sj_cron_{interaction.id}"
             )
 
             # 3. Jadwalkan Pengiriman Template Panjang STRICT RP saat jam OPEN SERVER
-            chosen_channel_id = SERVER_CHANNELS[selected_server]
+            chosen_channel_id = SERVER_CHANNELS[self.data_p1['channel']]
             scheduler.add_job(
                 send_open_server_strict_template,
                 'cron',
                 hour=o_hour,
                 minute=o_minute,
-                args=[chosen_channel_id, host_mention, self.f_aorp.value.strip(), self.f_code.value.strip()],
-                id=f"os_job_{interaction.id}"
+                args=[chosen_channel_id, self.data_p1['host'], self.data_p1['map_author'], self.data_p1['aorp'], self.data_p1['code']],
+                id=f"os_cron_{interaction.id}"
             )
-
-            try: await interaction.message.delete()
-            except Exception: pass
-
+            
             success_embed = discord.Embed(
-                title="✅ Scheduler Activated Successfully!",
+                title="Scheduler Activated Successfully!",
                 description=(
-                    f"• **Main Schedule** posted to announcement channel.\n"
-                    f"• **Staff Join Reminder** set for **{staff_join_time} WIB**.\n"
-                    f"• **Strict RP Template** set for **{open_server_time} WIB** on Channel {selected_server}."
+                    f"• Main Schedule has been published to the announcement channel.\n"
+                    f"• Staff Join Reminder has been scheduled for {self.f_staff.value.strip()} WIB.\n"
+                    f"• Strict Roleplay Template has been scheduled for {self.f_open.value.strip()} WIB in Channel {self.data_p1['channel']}."
                 ),
                 color=discord.Color.green()
             )
             await interaction.followup.send(embed=success_embed, ephemeral=True)
         else:
-            await interaction.followup.send("❌ Announcement channel ID not found.", ephemeral=True)
+            await interaction.followup.send("Failed: Operational announcement channel configuration missing.", ephemeral=True)
+
+
+class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Identity & Parameters"):
+    f_host = discord.ui.TextInput(label="Host Name", placeholder="e.g. @PRES | Doctor_BYP", required=True, max_length=100)
+    f_map = discord.ui.TextInput(label="Map Author Credit", placeholder="e.g. @PRES | Doctor_BYP", required=True, max_length=100)
+    f_day_date = discord.ui.TextInput(label="Day & Date", placeholder="e.g. Wednesday, 03 June 2026", required=True, max_length=100)
+    f_aorp = discord.ui.TextInput(label="AORP Location / City", placeholder="e.g. Bandung", required=True, max_length=100)
+    f_code = discord.ui.TextInput(label="Server Private Code / Link", placeholder="e.g. 1234567890", required=True, max_length=200)
+
+    def __init__(self, selected_channel: str):
+        super().__init__()
+        self.selected_channel = selected_channel
+
+    async def on_submit(self, interaction: discord.Interaction):
+        data_p1 = {
+            "host": self.f_host.value.strip(),
+            "map_author": self.f_map.value.strip(),
+            "day_date": self.f_day_date.value.strip(),
+            "aorp": self.f_aorp.value.strip(),
+            "code": self.f_code.value.strip(),
+            "channel": self.selected_channel
+        }
+
+        # Mengirim tombol transisi sah untuk memicu form kedua secara legal
+        class NextStageView(discord.ui.View):
+            def __init__(self): super().__init__(timeout=120)
+            @discord.ui.button(label="Proceed to Milestone Configuration", style=discord.ButtonStyle.primary, custom_id="btn_stage_2_exec")
+            async def open_p2(self, inner_interaction: discord.Interaction, button: discord.ui.Button):
+                await inner_interaction.response.send_modal(SessionPlannerPage2Modal(data_p1=data_p1))
+
+        transition_embed = discord.Embed(
+            description="Initial parameters recorded. Please proceed to the next stage to configure session timestamps.",
+            color=discord.Color(0x0d50b8)
+        )
+        await interaction.response.send_message(embed=transition_embed, view=NextStageView(), ephemeral=True)
+
+
+class ChannelSelectionModal(discord.ui.Modal, title="Target Route Optimization"):
+    f_channel = discord.ui.TextInput(
+        label="Target Strict RP Channel Number", placeholder="Type only: 1, 2, or 3", style=discord.TextStyle.short, required=True, max_length=5
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        chosen = self.f_channel.value.strip()
+        if chosen not in SERVER_CHANNELS:
+            return await interaction.response.send_message(
+                "Failed: The selected channel option is invalid. Only options 1, 2, and 3 are permitted.", 
+                ephemeral=True
+            )
+        # Menuju Form Pengisian Identitas
+        await interaction.response.send_modal(SessionPlannerPage1Modal(selected_channel=chosen))
 
 
 @bot.command(name="setsession")
@@ -390,19 +416,19 @@ async def start_session_planner(ctx):
     if not has_permission: return
 
     trigger_embed = discord.Embed(
-        title="📑 Session Scheduling Portal",
-        description="Click the button down below to configure all structured milestone times.",
+        title="Session Scheduling Portal",
+        description="Please use the button below to configure and manage all scheduled session milestones in accordance with operational requirements.",
         color=discord.Color(0x0d50b8)
     )
     
     class WizardTriggerView(discord.ui.View):
-        def __init__(self): super().__init__(timeout=60)
-        @discord.ui.button(label="Open Planner Form", style=discord.ButtonStyle.secondary, custom_id="btn_run_single_v1")
-        async def open_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        def __init__(self): super().__init__(timeout=None) # Timeout=None menjaga tombol tetap aktif permanen
+        @discord.ui.button(label="Open Form", style=discord.ButtonStyle.secondary, custom_id="btn_portal_main_v12")
+        async def run_wizard(self, interaction: discord.Interaction, button: discord.ui.Button):
             if interaction.user.id != ctx.author.id:
                 return await interaction.response.send_message("Unauthorized user interaction.", ephemeral=True)
-            # Langsung panggil modal tanpa jembatan perantara halaman demi menghindari bug Discord
-            await interaction.response.send_modal(SafeSingleSessionModal())
+            # Jembatan pertama menuju pemilihan target channel
+            await interaction.response.send_modal(ChannelSelectionModal())
 
     await ctx.send(embed=trigger_embed, view=WizardTriggerView())
 
@@ -439,7 +465,7 @@ async def on_ready():
     bot.add_view(LOAButtonView())
     if not check_expired_loa.is_running(): check_expired_loa.start()
     if not scheduler.running: scheduler.start()
-    print(f"System Active! {bot.user} is fully calibrated on Asia/Jakarta timezone.")
+    print(f"System Calibrated. {bot.user} is fully synchronized with Asia/Jakarta (WIB).")
 
 token = os.getenv('DISCORD_TOKEN')
 if token:
