@@ -424,6 +424,10 @@ class ChannelSelectComponent(discord.ui.Select):
         await interaction.response.send_modal(SessionPlannerPage1Modal(selected_channel=chosen))
 
 
+# ====================================================================
+# MANAGEMENT & SECURITY COMMANDS
+# ====================================================================
+
 @bot.command(name="setsession")
 async def start_session_planner(ctx):
     # FILTER SECURITY BARRIER: Hanya proses jika dijalankan dari dalam guild resmi Rise Country
@@ -447,9 +451,50 @@ async def start_session_planner(ctx):
 
     await ctx.send(embed=trigger_embed, view=WizardTriggerView())
 
-# ====================================================================
-# MANAGEMENT COMMANDS & ERRORS
-# ====================================================================
+@bot.command(name="removeloa")
+@commands.has_permissions(administrator=True)
+async def remove_loa_manual(ctx, member: discord.Member = None):
+    # FILTER SECURITY BARRIER: Hanya proses jika dijalankan dari dalam guild resmi Rise Country
+    if ctx.guild is None or ctx.guild.id != GUILD_ID: 
+        return
+
+    if member is None:
+        return await ctx.send("❌ **Error:** Mohon sebutkan staff yang ingin dihentikan LOA-nya. Contoh: `!removeloa @NamaStaff`")
+
+    guild = ctx.guild
+    role_loa = guild.get_role(ID_ROLE_LOA)
+    
+    # 1. Hapus Role LOA dari user jika mereka memilikinya
+    if role_loa and role_loa in member.roles:
+        try:
+            await member.remove_roles(role_loa)
+        except discord.Forbidden:
+            return await ctx.send(f"❌ **Error:** Bot tidak memiliki izin untuk menghapus role dari {member.mention}.")
+    
+    # 2. Bersihkan data dari database json
+    loa_data = load_loa_data()
+    member_id_str = str(member.id)
+    
+    if member_id_str in loa_data:
+        del loa_data[member_id_str]
+        save_loa_data(loa_data)
+        
+        # 3. Kirim notifikasi konfirmasi sukses yang formal
+        await ctx.send(f"✅ **Success:** Status LOA untuk {member.mention} telah dihentikan secara manual dan basis data telah diperbarui.")
+        
+        # Kirim DM ke Staff yang bersangkutan secara profesional
+        try:
+            embed_dm = discord.Embed(
+                title="Notice of LOA Termination", 
+                description="Your Leave of Absence (LOA) status has been manually concluded by the administration.",
+                color=discord.Color(0x0d50b8)
+            )
+            await member.send(embed=embed_dm)
+        except Exception:
+            pass # Mengabaikan jika DM staff ditutup
+    else:
+        await ctx.send(f"ℹ️ {member.mention} tidak terdaftar memiliki data LOA aktif di dalam sistem, namun jika ia memiliki role LOA, role tersebut telah dicabut.")
+
 @bot.command(name="loasystem")
 @commands.has_permissions(administrator=True)
 async def toggle_loa_system(ctx, status: str = None):
@@ -472,6 +517,9 @@ async def setup_loa(ctx):
     embed = discord.Embed(title="Leave of Absence (LOA) Portal", description="Welcome to the Leave of Absence System.", color=discord.Color(0x0d50b8))
     await ctx.send(embed=embed, view=LOAButtonView())
 
+# ====================================================================
+# GLOBAL EVENTS & ERROR HANDLERS
+# ====================================================================
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingPermissions): return
