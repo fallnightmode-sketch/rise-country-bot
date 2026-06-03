@@ -392,19 +392,21 @@ class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Identity & Param
         await interaction.response.send_message(embed=transition_embed, view=NextStageView(), ephemeral=True)
 
 
-class ChannelSelectionModal(discord.ui.Modal, title="Target Route Optimization"):
-    f_channel = discord.ui.TextInput(
-        label="Target Strict RP Channel Number", placeholder="Type only: 1, 2, or 3", style=discord.TextStyle.short, required=True, max_length=5
-    )
+# ====================================================================
+# COMPONENT: SELECT MENU FOR TARGET ROUTE OPTIMIZATION
+# ====================================================================
+class ChannelSelectComponent(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="Channel 1", value="1", description="Route strict session output to Server 1"),
+            discord.SelectOption(label="Channel 2", value="2", description="Route strict session output to Server 2"),
+            discord.SelectOption(label="Channel 3", value="3", description="Route strict session output to Server 3"),
+        ]
+        super().__init__(placeholder="Select Target Strict RP Channel...", min_values=1, max_values=1, options=options, custom_id="sel_channel_v12")
 
-    async def on_submit(self, interaction: discord.Interaction):
-        chosen = self.f_channel.value.strip()
-        if chosen not in SERVER_CHANNELS:
-            return await interaction.response.send_message(
-                "Failed: The selected channel option is invalid. Only options 1, 2, and 3 are permitted.", 
-                ephemeral=True
-            )
-        # Menuju Form Pengisian Identitas
+    async def callback(self, interaction: discord.Interaction):
+        chosen = self.values[0]
+        # Dropdown memicu Modal secara legal dan dijamin aman oleh sistem API Discord
         await interaction.response.send_modal(SessionPlannerPage1Modal(selected_channel=chosen))
 
 
@@ -417,18 +419,15 @@ async def start_session_planner(ctx):
 
     trigger_embed = discord.Embed(
         title="Session Scheduling Portal",
-        description="Please use the button below to configure and manage all scheduled session milestones in accordance with operational requirements.",
+        description="Please use the menu below to configure and manage all scheduled session milestones in accordance with operational requirements.",
         color=discord.Color(0x0d50b8)
     )
     
     class WizardTriggerView(discord.ui.View):
-        def __init__(self): super().__init__(timeout=None) # Timeout=None menjaga tombol tetap aktif permanen
-        @discord.ui.button(label="Open Form", style=discord.ButtonStyle.secondary, custom_id="btn_portal_main_v12")
-        async def run_wizard(self, interaction: discord.Interaction, button: discord.ui.Button):
-            if interaction.user.id != ctx.author.id:
-                return await interaction.response.send_message("Unauthorized user interaction.", ephemeral=True)
-            # Jembatan pertama menuju pemilihan target channel
-            await interaction.response.send_modal(ChannelSelectionModal())
+        def __init__(self): super().__init__(timeout=None) # Tombol & Menu Dropdown terus aktif permanen
+        def __init__(self):
+            super().__init__(timeout=None)
+            self.add_item(ChannelSelectComponent())
 
     await ctx.send(embed=trigger_embed, view=WizardTriggerView())
 
