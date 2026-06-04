@@ -136,7 +136,7 @@ class RejectReasonModal(discord.ui.Modal, title="LOA Rejection Reason"):
         embed = self.interaction_admin.message.embeds[0]
         embed.color = discord.Color.red()
         embed.title = "LOA REQUEST - REJECTED"
-        embed.add_field(name="🔴 Reason for Rejection", value=self.reason.value, inline=False)
+        embed.add_field(name="Reason for Rejection", value=self.reason.value, inline=False)
         
         await self.interaction_admin.message.edit(embed=embed, view=self.view_approval)
         
@@ -213,11 +213,11 @@ class AdminApprovalView(discord.ui.View):
         await interaction.response.send_modal(RejectReasonModal(member_id=self.member_id, interaction_admin=interaction, view_approval=self))
 
 class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
-    q1 = discord.ui.TextInput(label="1. Roblox Username", placeholder="e.g. Doctor_BYP", required=True, max_length=50)
-    q2 = discord.ui.TextInput(label="2. Position / Department", placeholder="e.g. STAFSUS / Polisi", required=True, max_length=70)
-    q3 = discord.ui.TextInput(label="3. LOA End Date Only (Format: DD/MM/YYYY)", placeholder="e.g. 15/06/2026", required=True, max_length=15)
-    q4 = discord.ui.TextInput(label="4. Reason & Notes", placeholder="e.g. Academic exams / Urgent family matters", style=discord.TextStyle.long, required=True, max_length=400)
-    q5 = discord.ui.TextInput(label="5. Reachable during leave? (Yes / No)", placeholder="e.g. Yes, via Discord DM", required=True, max_length=300)
+    q1 = discord.ui.TextInput(label="1. Roblox Username", placeholder="Please enter your Roblox username.", required=True, max_length=50)
+    q2 = discord.ui.TextInput(label="2. Position / Department", placeholder="Please enter your position or department.", required=True, max_length=70)
+    q3 = discord.ui.TextInput(label="3. LOA End Date Only (Format: DD/MM/YYYY)", placeholder="Please enter the end date of your Leave of Absence (LOA). (e.g., 01/06/2026).", required=True, max_length=15)
+    q4 = discord.ui.TextInput(label="4. Reason & Notes", placeholder="Please provide the reason and any additional notes regarding your leave request.", style=discord.TextStyle.long, required=True, max_length=400)
+    q5 = discord.ui.TextInput(label="5. Reachable during leave? (Yes / No)", placeholder="Please provide a response using Yes or No only.", required=True, max_length=300)
     
     async def on_submit(self, interaction: discord.Interaction):
         if interaction.guild_id != GUILD_ID: return
