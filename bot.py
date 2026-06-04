@@ -162,7 +162,7 @@ class RejectReasonModal(discord.ui.Modal, title="LOA Rejection Reason"):
         embed = self.interaction_admin.message.embeds[0]
         embed.color = discord.Color.red()
         embed.title = "LOA REQUEST - REJECTED"
-        embed.add_field(name="🔴 Reason for Rejection", value=self.reason.value, inline=False)
+        embed.add_field(name="Reason for Rejection", value=self.reason.value, inline=False)
         
         await self.interaction_admin.message.edit(embed=embed, view=self.view_approval)
         
@@ -236,11 +236,16 @@ class AdminApprovalView(discord.ui.View):
         await interaction.response.send_modal(RejectReasonModal(member_id=self.member_id, interaction_admin=interaction, view_approval=self))
 
 class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
-    q1 = discord.ui.TextInput(label="1. Roblox Username", placeholder="e.g. Doctor_BYP", required=True, max_length=50)
-    q2 = discord.ui.TextInput(label="2. Position / Department", placeholder="e.g. STAFSUS / Polisi", required=True, max_length=70)
-    q3 = discord.ui.TextInput(label="3. LOA End Date Only (Format: DD/MM/YYYY)", placeholder="e.g. 15/06/2026", required=True, max_length=15)
-    q4 = discord.ui.TextInput(label="4. Reason & Notes", placeholder="e.g. Academic exams / Urgent family matters", style=discord.TextStyle.long, required=True, max_length=400)
-    q5 = discord.ui.TextInput(label="5. Reachable during leave? (Yes / No)", placeholder="e.g. Yes, via Discord DM", required=True, max_length=300)
+    q1 = discord.ui.TextInput(label="1. Roblox Username", placeholder="Please enter your Roblox username.
+", required=True, max_length=50)
+    q2 = discord.ui.TextInput(label="2. Position / Department", placeholder="Please enter your position or department.
+", required=True, max_length=70)
+    q3 = discord.ui.TextInput(label="3. LOA End Date Only (Format: DD/MM/YYYY)", placeholder="Please enter the end date of your Leave of Absence (LOA). *(e.g., 01/06/2026)*.
+", required=True, max_length=15)
+    q4 = discord.ui.TextInput(label="4. Reason & Notes", placeholder="Please provide the reason and any additional notes regarding your leave request.
+", style=discord.TextStyle.long, required=True, max_length=400)
+    q5 = discord.ui.TextInput(label="5. Reachable during leave? (Yes / No)", placeholder="Please provide a response using **Yes** or **No** only.
+", required=True, max_length=300)
     
     async def on_submit(self, interaction: discord.Interaction):
         if interaction.guild_id != GUILD_ID: return
@@ -359,11 +364,11 @@ async def send_open_server_strict_template(target_channel_id, host_tag, map_auth
 # TWO-STAGE CONFIGURATION MODAL SYSTEM
 # ====================================================================
 class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Configurations"):
-    f_staff = discord.ui.TextInput(label="1) Staff Join Time (HH.MM)", placeholder="e.g. 16.27", style=discord.TextStyle.short, required=True)
-    f_open = discord.ui.TextInput(label="2) Open Server Time (HH.MM)", placeholder="e.g. 16.28", style=discord.TextStyle.short, required=True)
-    f_sts = discord.ui.TextInput(label="3) STS Time (HH.MM)", placeholder="e.g. 16.29", style=discord.TextStyle.short, required=True)
-    f_rp_start = discord.ui.TextInput(label="4) Roleplay Start Time (HH.MM)", placeholder="e.g. 17.00", style=discord.TextStyle.short, required=True)
-    f_end = discord.ui.TextInput(label="5) End Session Time (HH.MM)", placeholder="e.g. 17.01", style=discord.TextStyle.short, required=True)
+    f_staff = discord.ui.TextInput(label="1) Staff Join Time (HH.MM)", placeholder="Please enter the Staff Join Time.", style=discord.TextStyle.short, required=True)
+    f_open = discord.ui.TextInput(label="2) Open Server Time (HH.MM)", placeholder="Please enter the Open Server Time.", style=discord.TextStyle.short, required=True)
+    f_sts = discord.ui.TextInput(label="3) STS Time (HH.MM)", placeholder="Please enter the STS Time.", style=discord.TextStyle.short, required=True)
+    f_rp_start = discord.ui.TextInput(label="4) Roleplay Start Time (HH.MM)", placeholder="Please enter the Roleplay Start Time.", style=discord.TextStyle.short, required=True)
+    f_end = discord.ui.TextInput(label="5) End Session Time (HH.MM)", placeholder="Please enter the End Session Time.", style=discord.TextStyle.short, required=True)
 
     def __init__(self, data_p1: dict):
         super().__init__()
@@ -463,11 +468,11 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
             await interaction.followup.send("Failed: Operational announcement channel configuration missing.", ephemeral=True)
 
 class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Identity & Parameters"):
-    f_host = discord.ui.TextInput(label="Host Name", placeholder="e.g. @PRES | Doctor_BYP", required=True, max_length=100)
-    f_map = discord.ui.TextInput(label="Map Author Credit", placeholder="e.g. @PRES | Doctor_BYP", required=True, max_length=100)
-    f_day_date = discord.ui.TextInput(label="Day & Date", placeholder="e.g. Wednesday, 03 June 2026", required=True, max_length=100)
-    f_aorp = discord.ui.TextInput(label="AORP Location / City", placeholder="e.g. Bandung", required=True, max_length=100)
-    f_code = discord.ui.TextInput(label="Server Private Code / Link", placeholder="e.g. 1234567890", required=True, max_length=200)
+    f_host = discord.ui.TextInput(label="Host Name", placeholder="Please enter the host's Discord username.", required=True, max_length=100)
+    f_map = discord.ui.TextInput(label="Map Author Credit", placeholder="Please enter the host's Discord username.", required=True, max_length=100)
+    f_day_date = discord.ui.TextInput(label="Day & Date", placeholder="Please enter the day and date *(e.g., Monday, 01 June 2026).*", required=True, max_length=100)
+    f_aorp = discord.ui.TextInput(label="AORP Location / City", placeholder="Please enter the AORP.", required=True, max_length=100)
+    f_code = discord.ui.TextInput(label="Server Private Code / Link", placeholder="Please enter the private server code.", required=True, max_length=200)
 
     def __init__(self, selected_channel: str):
         super().__init__()
@@ -527,14 +532,14 @@ async def start_session_planner(ctx):
 async def remove_loa_manual(ctx, member: discord.Member = None):
     if ctx.guild is None or ctx.guild.id != GUILD_ID: return
     if member is None:
-        return await ctx.send("❌ **Error:** Mohon sebutkan staff yang ingin dihentikan LOA-nya. Contoh: `!end_loa @NamaStaff`")
+        return await ctx.send("Error. Please enter a valid staff username or ID.")
 
     guild = ctx.guild
     role_loa = guild.get_role(ID_ROLE_LOA)
     
     if role_loa and role_loa in member.roles:
         try: await member.remove_roles(role_loa)
-        except discord.Forbidden: return await ctx.send(f"❌ **Error:** Bot tidak memiliki izin role untuk {member.mention}.")
+        except discord.Forbidden: return await ctx.send(f"Error. Access request for {member.mention} has failed.")
     
     loa_data = load_loa_data()
     member_id_str = str(member.id)
