@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 
 # ====================================================================
-# FIX CRASH: URUTAN IMPORT DISCORD WAJIB BERADA DI PALING ATAS
+# URUTAN IMPORT DISCORD WAJIB BERADA DI PALING ATAS
 # ====================================================================
 import discord
 from discord.ext import commands, tasks
@@ -369,7 +369,6 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         
-        # Jalankan konversi otomatis ke mention Discord (<@ID>)
         host_tag = convert_to_user_mention(guild, self.data_p1['host'])
         map_author_tag = convert_to_user_mention(guild, self.data_p1['map_author'])
         
@@ -404,9 +403,28 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
         announcement_channel = bot.get_channel(ID_CHANNEL_ANNOUNCEMENT)
         if announcement_channel:
             await announcement_channel.send(announcement_text)
-            scheduler.add_job(send_staff_join_reminder, 'cron', hour=s_hour, minute=s_minute, args=[self.data_p1['aorp'], self.data_p1['code']], id=f"sj_cron_{interaction.id}")
+            
+            # PERBAIKAN UTAMA: Tambahkan parameter timezone=JAKARTA_TZ agar cron mengeksekusi tepat pada waktu WIB
+            scheduler.add_job(
+                send_staff_join_reminder, 
+                'cron', 
+                hour=s_hour, 
+                minute=s_minute, 
+                timezone=JAKARTA_TZ,
+                args=[self.data_p1['aorp'], self.data_p1['code']], 
+                id=f"sj_cron_{interaction.id}"
+            )
+            
             chosen_channel_id = SERVER_CHANNELS[self.data_p1['channel']]
-            scheduler.add_job(send_open_server_strict_template, 'cron', hour=o_hour, minute=o_minute, args=[chosen_channel_id, host_tag, map_author_tag, self.data_p1['aorp'], self.data_p1['code']], id=f"os_cron_{interaction.id}")
+            scheduler.add_job(
+                send_open_server_strict_template, 
+                'cron', 
+                hour=o_hour, 
+                minute=o_minute, 
+                timezone=JAKARTA_TZ,
+                args=[chosen_channel_id, host_tag, map_author_tag, self.data_p1['aorp'], self.data_p1['code']], 
+                id=f"os_cron_{interaction.id}"
+            )
             
             success_embed = discord.Embed(
                 title="Scheduler Activated Successfully!",
@@ -568,7 +586,6 @@ async def on_ready():
     bot.add_view(LOAButtonView())
     bot.add_view(WizardTriggerView()) 
     
-    # Ambil data cache server secara penuh demi fungsionalitas pencarian nama member
     guild = bot.get_guild(GUILD_ID)
     if guild:
         try:
