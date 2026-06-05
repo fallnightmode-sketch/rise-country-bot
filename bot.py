@@ -274,7 +274,7 @@ class LOAButtonView(discord.ui.View):
         await interaction.response.send_modal(LOAForm())
 
 # ====================================================================
-# AUTOMATED SCHEDULER EXECUTIONS (CRON JOBS)
+# AUTOMATED SCHEDULER EXECUTIONS (DATE-BASED JOBS)
 # ====================================================================
 async def send_staff_join_reminder(aorp_loc, server_code):
     print(f"[CRON RUN] Menjalankan tugas pengiriman pengingat staff join ({datetime.now(JAKARTA_TZ)})")
@@ -378,26 +378,25 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
         host_tag = convert_to_user_mention(guild, self.data_p1['host'])
         map_author_tag = convert_to_user_mention(guild, self.data_p1['map_author'])
         
-        # Ekstraksi string jam agar bersih dari spasi atau simbol selain angka dan titik/dua
-        staff_clean = re.sub(r'[^0-9.]', '', self.f_staff.value.strip().replace(":", "."))
-        open_clean = re.sub(r'[^0-9.]', '', self.f_open.value.strip().replace(":", "."))
-        
-        # PARSING JAM STAFF JOIN
-        try:
-            s_hour, s_minute = map(int, staff_clean.split('.'))
-            # Fitur Auto-Fix sistem 24 Jam demi mendeteksi input malam
-            if s_hour < 12 and datetime.now(JAKARTA_TZ).hour >= 12:
-                s_hour += 12
-        except Exception: 
-            return await interaction.followup.send("Failed: Invalid format for Staff Join Time. Use HH.MM configuration.", ephemeral=True)
+        # Mengunci basis waktu hari ini untuk digabungkan dengan input jam
+        now_jakarta = datetime.now(JAKARTA_TZ)
+        today_str = now_jakarta.strftime("%Y-%m-%d")
 
-        # PARSING JAM OPEN SERVER
+        # 1. PARSING ABSOLUT JAM STAFF JOIN (ANTI-MISSED)
         try:
-            o_hour, o_minute = map(int, open_clean.split('.'))
-            if o_hour < 12 and datetime.now(JAKARTA_TZ).hour >= 12:
-                o_hour += 12
+            s_time_raw = self.f_staff.value.strip().replace(".", ":")
+            s_datetime_obj = datetime.strptime(f"{today_str} {s_time_raw}", "%Y-%m-%d %H:%M")
+            s_datetime_localized = JAKARTA_TZ.localize(s_datetime_obj)
         except Exception: 
-            return await interaction.followup.send("Failed: Invalid format for Open Server Time. Use HH.MM configuration.", ephemeral=True)
+            return await interaction.followup.send("Failed: Format waktu Staff Join salah. Gunakan format HH:MM atau HH.MM (Contoh: 21:00)", ephemeral=True)
+
+        # 2. PARSING ABSOLUT JAM OPEN SERVER (ANTI-MISSED)
+        try:
+            o_time_raw = self.f_open.value.strip().replace(".", ":")
+            o_datetime_obj = datetime.strptime(f"{today_str} {o_time_raw}", "%Y-%m-%d %H:%M")
+            o_datetime_localized = JAKARTA_TZ.localize(o_datetime_obj)
+        except Exception: 
+            return await interaction.followup.send("Failed: Format waktu Open Server salah. Gunakan format HH:MM atau HH.MM (Contoh: 21:05)", ephemeral=True)
 
         session_time_computed = f"{self.f_open.value.strip()} - {self.f_end.value.strip()}"
 
@@ -421,21 +420,19 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
 
         announcement_channel = bot.get_channel(ID_CHANNEL_ANNOUNCEMENT)
         if announcement_channel:
-            # Jadwal Utama Langsung Dikirim Saat Itu Juga ke Pemerintah Announcement
+            # Kirim pengumuman teks utama langsung saat itu juga
             await announcement_channel.send(announcement_text)
             
-            # Membuat ID Unik acak agar jadwal baru tidak merusak atau menimpa jadwal lain yang aktif
+            # Membuat ID unik anti tabrakan data RAM
             unique_suffix = int(time.time())
             sj_job_id = f"sj_cron_{interaction.user.id}_{unique_suffix}"
             os_job_id = f"os_cron_{interaction.user.id}_{unique_suffix}"
 
-            # PENJADWALAN AUTOMATIC: Mendaftarkan jadwal kirim format ke APScheduler
+            # MENDAFTARKAN JADWAL SECARA PRESET 'date' (EKSEKUSI TEPAT DETIKNYA)
             scheduler.add_job(
                 send_staff_join_reminder, 
-                'cron', 
-                hour=s_hour, 
-                minute=s_minute,
-                timezone=JAKARTA_TZ,
+                'date', 
+                run_date=s_datetime_localized,
                 args=[self.data_p1['aorp'], self.data_p1['code']], 
                 id=sj_job_id
             )
@@ -443,25 +440,22 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
             chosen_channel_id = SERVER_CHANNELS[self.data_p1['channel']]
             scheduler.add_job(
                 send_open_server_strict_template, 
-                'cron', 
-                hour=o_hour, 
-                minute=o_minute,
-                timezone=JAKARTA_TZ,
+                'date', 
+                run_date=o_datetime_localized,
                 args=[chosen_channel_id, host_tag, map_author_tag, self.data_p1['aorp'], self.data_p1['code']], 
                 id=os_job_id
             )
             
-            # Sistem Print Log Mandiri untuk verifikasi di Konsol Railway Anda
-            print(f"[SCHEDULER LOG] Berhasil dipasang untuk {interaction.user.name}:")
-            print(f" -> Staff Join target jam {s_hour:02d}:{s_minute:02d} WIB (ID: {sj_job_id})")
-            print(f" -> Open Server target jam {o_hour:02d}:{o_minute:02d} WIB (ID: {os_job_id})")
+            print(f"[SCHEDULER LOG] Berhasil dipasang dengan aman:")
+            print(f" -> Staff Join target: {s_datetime_localized.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            print(f" -> Open Server target: {o_datetime_localized.strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
             success_embed = discord.Embed(
                 title="Scheduler Activated Successfully!",
                 description=(
-                    f"• Main Schedule has been published with corrected user tagging.\n"
-                    f"• Staff Join Reminder has been scheduled for **{s_hour:02d}:{s_minute:02d} WIB**.\n"
-                    f"• Strict Roleplay Template has been scheduled for **{o_hour:02d}:{o_minute:02d} WIB** in Channel Server {self.data_p1['channel']}."
+                    f"• Main Schedule has been published.\n"
+                    f"• Staff Join Reminder locked at **{s_time_raw} WIB**.\n"
+                    f"• Strict Roleplay Template locked at **{o_time_raw} WIB**."
                 ),
                 color=discord.Color.green()
             )
