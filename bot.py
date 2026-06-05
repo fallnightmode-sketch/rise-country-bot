@@ -422,12 +422,13 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
             sj_job_id = f"sj_cron_{interaction.user.id}_{unique_suffix}"
             os_job_id = f"os_cron_{interaction.user.id}_{unique_suffix}"
 
-            # MENDAFTARKAN JADWAL SECARA PRESET 'cron' (EKSEKUSI BERDASARKAN PARAMETER JAM & MENIT)
+            # MENDAFTARKAN JADWAL SECARA PRESET 'cron' DENGAN TIMEZONE JAKARTA YANG DIKUNCI ABSOLUT
             scheduler.add_job(
                 send_staff_join_reminder, 
                 'cron', 
                 hour=s_hour,
                 minute=s_min,
+                timezone=JAKARTA_TZ,
                 args=[self.data_p1['aorp'], self.data_p1['code']], 
                 id=sj_job_id
             )
@@ -438,13 +439,14 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
                 'cron', 
                 hour=o_hour,
                 minute=o_min,
+                timezone=JAKARTA_TZ,
                 args=[chosen_channel_id, host_tag, map_author_tag, self.data_p1['aorp'], self.data_p1['code']], 
                 id=os_job_id
             )
             
-            print(f"[SCHEDULER LOG] Berhasil dipasang dengan aman (Tipe: cron):")
-            print(f" -> Staff Join target jam: {s_hour:02d}:{s_min:02d}")
-            print(f" -> Open Server target jam: {o_hour:02d}:{o_min:02d}")
+            print(f"[SCHEDULER LOG] Berhasil dipasang dengan aman (Tipe: cron + Asia/Jakarta):")
+            print(f" -> Staff Join target jam: {s_hour:02d}:{s_min:02d} WIB")
+            print(f" -> Open Server target jam: {o_hour:02d}:{o_min:02d} WIB")
 
             success_embed = discord.Embed(
                 title="Scheduler Activated Successfully!",
