@@ -3,6 +3,7 @@ import subprocess
 import re
 import os
 import json
+import time
 from datetime import datetime
 
 # ====================================================================
@@ -276,7 +277,7 @@ class LOAButtonView(discord.ui.View):
 # AUTOMATED SCHEDULER EXECUTIONS (CRON JOBS)
 # ====================================================================
 async def send_staff_join_reminder(aorp_loc, server_code):
-    print(f"[CRON RUN] Menjalankan tugas pengiriman pengingat staff join ({datetime.now()})")
+    print(f"[CRON RUN] Menjalankan tugas pengiriman pengingat staff join ({datetime.now(JAKARTA_TZ)})")
     channel = bot.get_channel(ID_CHANNEL_ANNOUNCEMENT)
     if channel:
         reminder_text = (
@@ -295,7 +296,7 @@ async def send_staff_join_reminder(aorp_loc, server_code):
         print("[CRON ERROR] Channel Announcement tidak ditemukan!")
 
 async def send_open_server_strict_template(target_channel_id, host_tag, map_author, aorp_loc, server_code):
-    print(f"[CRON RUN] Menjalankan tugas pengiriman Open Server template ({datetime.now()})")
+    print(f"[CRON RUN] Menjalankan tugas pengiriman Open Server template ({datetime.now(JAKARTA_TZ)})")
     channel = bot.get_channel(target_channel_id)
     if channel:
         template = (
@@ -377,17 +378,24 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
         host_tag = convert_to_user_mention(guild, self.data_p1['host'])
         map_author_tag = convert_to_user_mention(guild, self.data_p1['map_author'])
         
-        # PERBAIKAN STRIP & VALIDASI PARSING: Menggunakan regex murni menghindari bug karakter aneh
+        # Ekstraksi string jam agar bersih dari spasi atau simbol selain angka dan titik/dua
         staff_clean = re.sub(r'[^0-9.]', '', self.f_staff.value.strip().replace(":", "."))
         open_clean = re.sub(r'[^0-9.]', '', self.f_open.value.strip().replace(":", "."))
         
+        # PARSING JAM STAFF JOIN
         try:
             s_hour, s_minute = map(int, staff_clean.split('.'))
+            # Fitur Auto-Fix sistem 24 Jam demi mendeteksi input malam
+            if s_hour < 12 and datetime.now(JAKARTA_TZ).hour >= 12:
+                s_hour += 12
         except Exception: 
             return await interaction.followup.send("Failed: Invalid format for Staff Join Time. Use HH.MM configuration.", ephemeral=True)
 
+        # PARSING JAM OPEN SERVER
         try:
             o_hour, o_minute = map(int, open_clean.split('.'))
+            if o_hour < 12 and datetime.now(JAKARTA_TZ).hour >= 12:
+                o_hour += 12
         except Exception: 
             return await interaction.followup.send("Failed: Invalid format for Open Server Time. Use HH.MM configuration.", ephemeral=True)
 
@@ -413,16 +421,15 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
 
         announcement_channel = bot.get_channel(ID_CHANNEL_ANNOUNCEMENT)
         if announcement_channel:
-            # Jadwal Utama Langsung Dikirim Saat Itu Juga
+            # Jadwal Utama Langsung Dikirim Saat Itu Juga ke Pemerintah Announcement
             await announcement_channel.send(announcement_text)
             
-            # PEMBERSIHAN ANTRIAN SAMA: Hapus ID lama jika bertumpuk demi kestabilan memori
-            try: scheduler.remove_job(f"sj_cron_{interaction.user.id}")
-            except Exception: pass
-            try: scheduler.remove_job(f"os_cron_{interaction.user.id}")
-            except Exception: pass
+            # Membuat ID Unik acak agar jadwal baru tidak merusak atau menimpa jadwal lain yang aktif
+            unique_suffix = int(time.time())
+            sj_job_id = f"sj_cron_{interaction.user.id}_{unique_suffix}"
+            os_job_id = f"os_cron_{interaction.user.id}_{unique_suffix}"
 
-            # PENJADWALAN AMAN: Memakai trigger 'cron' dengan parameter timezone murni terenkapsulasi
+            # PENJADWALAN AUTOMATIC: Mendaftarkan jadwal kirim format ke APScheduler
             scheduler.add_job(
                 send_staff_join_reminder, 
                 'cron', 
@@ -430,7 +437,7 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
                 minute=s_minute,
                 timezone=JAKARTA_TZ,
                 args=[self.data_p1['aorp'], self.data_p1['code']], 
-                id=f"sj_cron_{interaction.user.id}"
+                id=sj_job_id
             )
             
             chosen_channel_id = SERVER_CHANNELS[self.data_p1['channel']]
@@ -441,20 +448,20 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
                 minute=o_minute,
                 timezone=JAKARTA_TZ,
                 args=[chosen_channel_id, host_tag, map_author_tag, self.data_p1['aorp'], self.data_p1['code']], 
-                id=f"os_cron_{interaction.user.id}"
+                id=os_job_id
             )
             
-            # Print log untuk verifikasi di terminal hosting kamu
+            # Sistem Print Log Mandiri untuk verifikasi di Konsol Railway Anda
             print(f"[SCHEDULER LOG] Berhasil dipasang untuk {interaction.user.name}:")
-            print(f" -> Staff Join target jam {s_hour}:{s_minute} WIB (ID: sj_cron_{interaction.user.id})")
-            print(f" -> Open Server target jam {o_hour}:{o_minute} WIB (ID: os_cron_{interaction.user.id})")
+            print(f" -> Staff Join target jam {s_hour:02d}:{s_minute:02d} WIB (ID: {sj_job_id})")
+            print(f" -> Open Server target jam {o_hour:02d}:{o_minute:02d} WIB (ID: {os_job_id})")
 
             success_embed = discord.Embed(
                 title="Scheduler Activated Successfully!",
                 description=(
                     f"• Main Schedule has been published with corrected user tagging.\n"
-                    f"• Staff Join Reminder has been scheduled for {s_hour:02d}:{s_minute:02d} WIB.\n"
-                    f"• Strict Roleplay Template has been scheduled for {o_hour:02d}:{o_minute:02d} WIB in Channel {self.data_p1['channel']}."
+                    f"• Staff Join Reminder has been scheduled for **{s_hour:02d}:{s_minute:02d} WIB**.\n"
+                    f"• Strict Roleplay Template has been scheduled for **{o_hour:02d}:{o_minute:02d} WIB** in Channel Server {self.data_p1['channel']}."
                 ),
                 color=discord.Color.green()
             )
