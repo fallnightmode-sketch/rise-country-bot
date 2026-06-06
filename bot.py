@@ -520,7 +520,7 @@ async def toggle_loa_system(ctx, status: str = None):
         await ctx.send("The Leave of Absence (LOA) system has been temporarily disabled. Please await further notice regarding its reactivation.")
     elif status.lower() == "on":
         loa_system_active = True
-        await ctx.send("The Leave of Absence (LOA) system has been reactivated.")
+        await ctx.send("The Leave of Absence (LOA) system has been reactivated and is now available for use. Eligible members may proceed with submitting their LOA requests in accordance with the established procedures.")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
