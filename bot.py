@@ -396,13 +396,17 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
             )
 
             success_embed = discord.Embed(
-                title="Scheduler Activated!",
-                description=f"Menggunakan metode lama:\n• Staff Join: `{s_hour:02d}:{s_min:02d}`\n• Open Server: `{o_hour:02d}:{o_min:02d}`",
+                title="Scheduler Activated Successfully!",
+                description=(
+                    f"• Main Schedule has been published.\n"
+                    f"• Staff Join Reminder locked at **{s_hour:02d}:{s_min:02d} WIB**.\n"
+                    f"• Strict Roleplay Template locked at **{o_hour:02d}:{o_min:02d} WIB**."
+                ),
                 color=discord.Color.green()
             )
             await interaction.followup.send(embed=success_embed, ephemeral=True)
         else:
-            await interaction.followup.send("Failed: Channel missing.", ephemeral=True)
+            await interaction.followup.send("Failed: Operational announcement channel configuration missing.", ephemeral=True)
 
 class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Identity & Parameters"):
     f_host = discord.ui.TextInput(label="Host Name", placeholder="Please enter the host's Discord username.", required=True, max_length=100)
@@ -462,23 +466,46 @@ async def start_session_planner(ctx):
     user_roles = [role.id for role in ctx.author.roles]
     has_permission = ctx.author.guild_permissions.administrator or any(role_id in user_roles for role_id in ALLOWED_ROLE_SESSION_IDS)
     if not has_permission: return
-    await ctx.send(content="Select the destination channel format:", view=WizardTriggerView())
+
+    trigger_embed = discord.Embed(title="Session Scheduling Portal", description="Please use the menu below to configure and manage all scheduled session milestones.", color=discord.Color(0x0d50b8))
+    await ctx.send(embed=trigger_embed, view=WizardTriggerView())
 
 @bot.command(name="end_loa")
 @commands.has_permissions(administrator=True)
 async def remove_loa_manual(ctx, member: discord.Member = None):
     if ctx.guild is None or ctx.guild.id != GUILD_ID: return
-    if member is None: return await ctx.send("Error. Please enter a user.")
+    if member is None:
+        return await ctx.send("Error. Please enter a valid staff username or ID.")
+
     guild = ctx.guild
     role_loa = guild.get_role(ID_ROLE_LOA)
+    
     if role_loa and role_loa in member.roles:
         try: await member.remove_roles(role_loa)
-        except Exception: pass
+        except discord.Forbidden: return await ctx.send(f"Error. Access request for {member.mention} has failed.")
+    
     loa_data = load_loa_data()
-    if str(member.id) in loa_data:
-        del loa_data[str(member.id)]
+    member_id_str = str(member.id)
+    if member_id_str in loa_data:
+        del loa_data[member_id_str]
         save_loa_data(loa_data)
-    await ctx.send(f"LOA period has been successfully terminated for {member.display_name}. Role removed.")
+    
+    await ctx.send(f"LOA period has been successfully terminated for **{member.display_name}**. Role removed.")
+    
+    try:
+        embed_dm = discord.Embed(
+            title="Notice of LOA Termination",
+            description=(
+                f"Hello {member.mention},\n\n"
+                f"This is an official notification to inform you that your Leave of Absence (LOA) "
+                f"period has concluded. Your LOA role has been removed, and you are expected to "
+                f"resume your standard duties and responsibilities.\n\n"
+                f"**Thank you for your cooperation and welcome back.**"
+            ),
+            color=discord.Color(0x0d50b8)
+        )
+        await member.send(embed=embed_dm)
+    except Exception: pass
 
 @bot.command(name="loasystem")
 @commands.has_permissions(administrator=True)
