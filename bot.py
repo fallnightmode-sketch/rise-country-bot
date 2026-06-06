@@ -16,7 +16,7 @@ try:
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     import pytz
 except ModuleNotFoundError:
-    print("Mendapati dependensi belum lengkap. Menginstal secara otomatis...")
+    print("Required dependencies were not found. Installing them automatically...")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "apscheduler==3.10.4", "pytz"])
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     import pytz
@@ -346,7 +346,7 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
             open_clean = re.sub(r'[^0-9.]', '', self.f_open.value.strip().replace(":", "."))
             o_hour, o_min = map(int, open_clean.split('.'))
         except Exception:
-            return await interaction.followup.send("Gagal membaca format jam lama. Harap gunakan angka pemisah titik (Contoh: 21.00)", ephemeral=True)
+            return await interaction.followup.send("Submission Failed: Unable to read the specified time format. Please use a dot (.) as the separator (e.g., 21.00).", ephemeral=True)
 
         session_time_computed = f"{self.f_open.value.strip()} - {self.f_end.value.strip()}"
 
@@ -494,7 +494,23 @@ async def toggle_loa_system(ctx, status: str = None):
 @commands.has_permissions(administrator=True)
 async def setup_loa(ctx):
     if ctx.guild is None or ctx.guild.id != GUILD_ID: return
-    await ctx.send(content="Sistem LOA Portal", view=LOAButtonView())
+    embed = discord.Embed(
+        title="Leave of Absence (LOA) Portal", 
+        description=(
+            "Welcome to the Leave of Absence System.\n\n"
+            "This system is intended for members who require a temporary leave from their "
+            "duties and responsibilities. Please submit your request with a clear reason and an "
+            "accurate duration of absence.\n\n"
+            "All submissions will be reviewed by the President or Vice President. Requests "
+            "containing false information or any misuse of this system may result in disciplinary "
+            "action in accordance with applicable regulations.\n\n"
+            "The outcome of your LOA request will be sent to you via Direct Message (DM) "
+            "once it has been reviewed and approved by the President or Vice President.\n\n"
+            "Thank you for your cooperation and professionalism."
+        ), 
+        color=discord.Color(0x0d50b8)
+    )
+    await ctx.send(embed=embed, view=LOAButtonView())
 
 # ====================================================================
 # RUNTIME INITIALIZATION
