@@ -32,7 +32,7 @@ JAKARTA_TZ = pytz.timezone("Asia/Jakarta")
 scheduler = AsyncIOScheduler(timezone=JAKARTA_TZ)
 
 # ====================================================================
-# KONSTANTA KONFIGURASI
+# KONSTANTA KONFIGURASI (Rise Country Official Only)
 # ====================================================================
 GUILD_ID = 1351182942625337378            
 ID_CHANNEL_LOG_LOA = 1510642659776266442  
@@ -115,10 +115,10 @@ async def check_expired_loa():
     if updated: save_loa_data(loa_data)
 
 # ====================================================================
-# LOGIKA MODAL LOA
+# LOGIKA MODAL LOA (SECURED)
 # ====================================================================
 class RejectReasonModal(discord.ui.Modal, title="LOA Rejection Reason"):
-    reason = discord.ui.TextInput(label="Reason for Rejection", placeholder="e.g. Input administrative rejection grouds here...", style=discord.TextStyle.long, required=True, max_length=300)
+    reason = discord.ui.TextInput(label="Reason for Rejection", placeholder="e.g. Input administrative rejection grounds here...", style=discord.TextStyle.long, required=True, max_length=300)
 
     def __init__(self, member_id: int, interaction_admin: discord.Interaction, view_approval):
         super().__init__()
@@ -127,7 +127,7 @@ class RejectReasonModal(discord.ui.Modal, title="LOA Rejection Reason"):
         self.view_approval = view_approval
 
     async def on_submit(self, interaction: discord.Interaction):
-        if interaction.guild_id != GUILD_ID: return
+        if interaction.guild_id != GUILD_ID: return  # Kunci Server Guard
         await interaction.response.defer()
 
         guild = interaction.guild
@@ -147,24 +147,24 @@ class RejectReasonModal(discord.ui.Modal, title="LOA Rejection Reason"):
                     description=(
                         f"Hello {member.mention},\n\n"
                         f"We regret to inform you that your Leave of Absence (LOA) request has been "
-                        f"reviewed and rejected by the administration.\n\n."
-                        f"{self.reason.value}\n\n"
+                        f"reviewed and rejected by the administration.\n\n"
+                        f"**Reason:** {self.reason.value}\n\n"
                         f"Please contact the President or Vice President for further clarification."
                     ),
                     color=discord.Color.red()
                 )
                 await member.send(embed=embed_dm)
-            except Execption: pass
+            except Exception: pass
 
 class AdminApprovalView(discord.ui.View):
     def __init__(self, member_id: int, data_form: dict):
         super().__init__(timeout=None)
         self.member_id = member_id
         self.data_form = data_form
-    
+        
     @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_v14")
     async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.guild_id != GUILD_ID: return
+        if interaction.guild_id != GUILD_ID: return  # Kunci Server Guard
         await interaction.response.defer()
         guild = interaction.guild
         member = guild.get_member(self.member_id)
@@ -204,7 +204,7 @@ class AdminApprovalView(discord.ui.View):
 
     @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_v14")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.guild_id != GUILD_ID: return
+        if interaction.guild_id != GUILD_ID: return  # Kunci Server Guard
         for child in self.children: child.disabled = True
         await interaction.response.send_modal(RejectReasonModal(member_id=self.member_id, interaction_admin=interaction, view_approval=self))
 
@@ -216,7 +216,7 @@ class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
     q5 = discord.ui.TextInput(label="5. Reachable during leave? (Yes / No)", placeholder="Please provide a response using Yes or No only.", required=True, max_length=300)
     
     async def on_submit(self, interaction: discord.Interaction):
-        if interaction.guild_id != GUILD_ID: return
+        if interaction.guild_id != GUILD_ID: return  # Kunci Server Guard
         member = interaction.user
         await interaction.response.defer(ephemeral=True)
         try: datetime.strptime(self.q3.value.strip(), "%d/%m/%Y")
@@ -237,14 +237,15 @@ class LOAButtonView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
     @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_v14")
     async def create_loa_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.guild_id != GUILD_ID: return
+        if interaction.guild_id != GUILD_ID: return  # Kunci Server Guard
         if not loa_system_active: return await interaction.response.send_message("The LOA system has been temporarily disabled.", ephemeral=True)
         await interaction.response.send_modal(LOAForm())
 
 # ====================================================================
-# FUNGSI CRON EKSEKUSI OTOMATIS (BENTUKAN LAMA)
+# FUNGSI CRON EKSEKUSI OTOMATIS (STRUKTUR METODE LAMA)
 # ====================================================================
 async def send_staff_join_reminder(aorp_loc, server_code):
+    print(f"[METODE LAMA LOG] Pemicu cron dijalankan otomatis untuk Staff Join Reminder.")
     channel = bot.get_channel(ID_CHANNEL_ANNOUNCEMENT)
     if channel:
         reminder_text = (
@@ -260,6 +261,7 @@ async def send_staff_join_reminder(aorp_loc, server_code):
         await channel.send(content=reminder_text)
 
 async def send_open_server_strict_template(target_channel_id, host_tag, map_author, aorp_loc, server_code):
+    print(f"[METODE LAMA LOG] Pemicu cron dijalankan otomatis untuk Strict Template Open Server.")
     channel = bot.get_channel(target_channel_id)
     if channel:
         template = (
@@ -317,7 +319,7 @@ async def send_open_server_strict_template(target_channel_id, host_tag, map_auth
         await channel.send(content=template)
 
 # ====================================================================
-# TWO-STAGE MODAL (KEMBALI KE STRUKTUR LAMA: PARSING STRING MANUAL)
+# TWO-STAGE MODAL (STRUKTUR UTUH & AMAN)
 # ====================================================================
 class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Configurations"):
     f_staff = discord.ui.TextInput(label="1) Staff Join Time (HH.MM)", placeholder="Please enter the Staff Join Time.", required=True)
@@ -331,13 +333,12 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
         self.data_p1 = data_p1
 
     async def on_submit(self, interaction: discord.Interaction):
-        if interaction.guild_id != GUILD_ID: return
+        if interaction.guild_id != GUILD_ID: return  # Kunci Server Guard
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         
         host_tag = convert_to_user_mention(guild, self.data_p1['host'])
         
-        # BENTUKAN LAMA: Pemisahan string menggunakan regex / split titik biasa
         try:
             staff_clean = re.sub(r'[^0-9.]', '', self.f_staff.value.strip().replace(":", "."))
             s_hour, s_min = map(int, staff_clean.split('.'))
@@ -371,10 +372,10 @@ class SessionPlannerPage2Modal(discord.ui.Modal, title="Page 2: Milestone Config
         if announcement_channel:
             await announcement_channel.send(announcement_text)
             
-            # KEMBALI KE TEMPLATE SCHEDULER 'cron' ASLI YANG BISA JALAN DULU
             sj_job_id = f"sj_cron_{interaction.user.id}_{int(time.time())}"
             os_job_id = f"os_cron_{interaction.user.id}_{int(time.time())}"
 
+            # Register CRON Job Lama
             scheduler.add_job(
                 send_staff_join_reminder, 
                 'cron', 
@@ -415,7 +416,8 @@ class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Identity & Param
         self.selected_channel = selected_channel
 
     async def on_submit(self, interaction: discord.Interaction):
-        if interaction.guild_id != GUILD_ID: return
+        if interaction.guild_id != GUILD_ID: return  # SEBELUMNYA REKREASI INI JEBOL (Kini di-KUNCI!)
+        
         data_p1 = {
             "host": self.f_host.value.strip(), "map_author": self.f_map.value.strip(),
             "day_date": self.f_day_date.value.strip(), "aorp": self.f_aorp.value.strip(),
@@ -426,10 +428,11 @@ class SessionPlannerPage1Modal(discord.ui.Modal, title="Page 1: Identity & Param
             def __init__(self): super().__init__(timeout=120)
             @discord.ui.button(label="Proceed to Milestone Configuration", style=discord.ButtonStyle.primary, custom_id="btn_stage_2_exec")
             async def open_p2(self, inner_interaction: discord.Interaction, button: discord.ui.Button):
-                if inner_interaction.guild_id !=GUILD_ID: return
+                if inner_interaction.guild_id != GUILD_ID: return # Keamanan Tombol Guard
                 await inner_interaction.response.send_modal(SessionPlannerPage2Modal(data_p1=data_p1))
 
-        transition_embed = discord.Embed(description="Initial parameters recorded. Please proceed to the next stage to configure session timestamps.", color-discord.Color(0x0d50b8))
+        # TYPO FIXED: Perbaikan bug fatal color-discord menjadi color=discord
+        transition_embed = discord.Embed(description="Initial parameters recorded. Please proceed to the next stage to configure session timestamps.", color=discord.Color(0x0d50b8))
         await interaction.response.send_message(embed=transition_embed, view=NextStageView(), ephemeral=True)
 
 class ChannelSelectComponent(discord.ui.Select):
@@ -440,8 +443,9 @@ class ChannelSelectComponent(discord.ui.Select):
             discord.SelectOption(label="Channel 3", value="3"),
         ]
         super().__init__(placeholder="Select Target Strict RP Channel...", min_values=1, max_values=1, options=options, custom_id="sel_channel_v14")
+    
     async def callback(self, interaction: discord.Interaction):
-        if interaction.guild_id != GUILD_ID: return
+        if interaction.guild_id != GUILD_ID: return  # Kunci Server Guard
         await interaction.response.send_modal(SessionPlannerPage1Modal(selected_channel=self.values[0]))
 
 class WizardTriggerView(discord.ui.View):
@@ -450,7 +454,7 @@ class WizardTriggerView(discord.ui.View):
         self.add_item(ChannelSelectComponent())
 
 # ====================================================================
-# UTILITY COMMANDS
+# UTILITY COMMANDS (SECURED WITH GUILD LOCK)
 # ====================================================================
 @bot.command(name="setsession")
 async def start_session_planner(ctx):
@@ -479,6 +483,7 @@ async def remove_loa_manual(ctx, member: discord.Member = None):
 @bot.command(name="loasystem")
 @commands.has_permissions(administrator=True)
 async def toggle_loa_system(ctx, status: str = None):
+    if ctx.guild is None or ctx.guild.id != GUILD_ID: return
     global loa_system_active
     if status is None: return await ctx.send(f"Status LOA: {loa_system_active}")
     if status.lower() == "off": loa_system_active = False
@@ -491,13 +496,16 @@ async def setup_loa(ctx):
     if ctx.guild is None or ctx.guild.id != GUILD_ID: return
     await ctx.send(content="Sistem LOA Portal", view=LOAButtonView())
 
+# ====================================================================
+# RUNTIME INITIALIZATION
+# ====================================================================
 @bot.event
 async def on_ready():
     bot.add_view(LOAButtonView())
     bot.add_view(WizardTriggerView()) 
     if not check_expired_loa.is_running(): check_expired_loa.start()
     if not scheduler.running: scheduler.start()
-    print(f"Bot siap menggunakan struktur lama.")
+    print(f"Bot aman & siap digunakan menggunakan struktur lama khusus Server ID: {GUILD_ID}.")
 
 token = os.getenv('DISCORD_TOKEN')
 bot.run(token)
