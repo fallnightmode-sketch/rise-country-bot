@@ -253,10 +253,10 @@ async def send_staff_join_reminder(aorp_loc, server_code):
             f"AORP: {aorp_loc}\n"
             f"Server Code: {server_code}\n\n"
             f"-# Notes:\n"
-            f"-# - Anda memiliki waktu 10 menit sejak kode ini dibagikan untuk join ke server, apabila Anda tidak join dalam waktu 10 menit tanpa keterangan yang jelas, Anda akan mendapatkan warning\n"
-            f"-# - Gunakan seragam kerja Rise Country.\n"
-            f"-# - Gunakan plat dinas Rise Country.\n"
-            f"-# - Sistem akan secara otomatis mengirim format ke Server 1, 2, dan 3 sesuai waktu yang ditentukan. Mohon untuk sudah standby di STS 5 menit sebelum waktu pembukaan server roleplay."
+            f"-# - Anda memiliki waktu 10 menit sejak kode ini dibagikan untuk bergabung ke dalam server. Apabila Anda tidak bergabung dalam batas waktu tersebut tanpa memberikan keterangan yang jelas, Anda akan dikenakan satu kali warning."
+            f"-# - Harap menggunakan seragam kerja Rise Country selama bertugas.\n"
+            f"-# - Harap menggunakan plat dinas resmi Rise Country.\n"
+            f"-# - Sistem akan secara otomatis mengirimkan format ke Server 1, Server 2, dan Server 3 sesuai jadwal yang telah ditentukan. Mohon untuk sudah standby di STS setidaknya 5 menit sebelum waktu pembukaan server roleplay."
         )
         await channel.send(content=reminder_text)
 
