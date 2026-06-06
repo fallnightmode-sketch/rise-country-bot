@@ -512,10 +512,15 @@ async def remove_loa_manual(ctx, member: discord.Member = None):
 async def toggle_loa_system(ctx, status: str = None):
     if ctx.guild is None or ctx.guild.id != GUILD_ID: return
     global loa_system_active
-    if status is None: return await ctx.send(f"Status LOA: {loa_system_active}")
-    if status.lower() == "off": loa_system_active = False
-    elif status.lower() == "on": loa_system_active = True
-    await ctx.send(f"The LOA system has been changed to: {loa_system_active}")
+    if status is None:
+        current_status = "ENABLED" if loa_system_active else "DISABLED"
+        return await ctx.send(f"⚙️ **LOA System Status:** `{current_status}`")
+    if status.lower() == "off":
+        loa_system_active = False
+        await ctx.send("The Leave of Absence (LOA) system has been temporarily disabled. Please await further notice regarding its reactivation.")
+    elif status.lower() == "on":
+        loa_system_active = True
+        await ctx.send("The Leave of Absence (LOA) system has been reactivated.")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
