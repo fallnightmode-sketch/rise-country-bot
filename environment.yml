@@ -1,0 +1,11 @@
+name: rise-country-bot
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - discord.py
+    - apscheduler
+    - pytz
