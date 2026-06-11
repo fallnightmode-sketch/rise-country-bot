@@ -211,35 +211,148 @@ class AdminApprovalView(discord.ui.View):
 class LOAForm(discord.ui.Modal, title="Leave of Absence Application"):
     q1 = discord.ui.TextInput(label="1. Roblox Username", placeholder="Please enter your Roblox username.", required=True, max_length=50)
     q2 = discord.ui.TextInput(label="2. Position / Department", placeholder="Please enter your position or department.", required=True, max_length=70)
-    q3 = discord.ui.TextInput(label="3. LOA End Date (DD/MM/YYYY)", placeholder="Please enter the end date of your Leave of Absence (LOA). (e.g., 01/06/2026)", required=True, max_length=15)
-    q4 = discord.ui.TextInput(label="4. Reason & Notes", placeholder="Please provide the reason and any additional notes regarding your leave request.", style=discord.TextStyle.long, required=True, max_length=400)
-    q5 = discord.ui.TextInput(label="5. Reachable during leave? (Yes / No)", placeholder="Please provide a response using Yes or No only.", required=True, max_length=300)
+    q3 = discord.ui.TextInput(label="3. LOA Start Date (DD/MM/YYYY)", placeholder="e.g., 10/06/2026", required=True, max_length=15)
+    q4 = discord.ui.TextInput(label="4. LOA End Date (DD/MM/YYYY)", placeholder="e.g., 17/06/2026", required=True, max_length=15)
+    q5 = discord.ui.TextInput(label="5. Reason & Notes", placeholder="Please provide the reason regarding your leave request.", style=discord.TextStyle.long, required=True, max_length=400)
     
     async def on_submit(self, interaction: discord.Interaction):
-        if interaction.guild_id != GUILD_ID: return  # Kunci Server Guard
+        if interaction.guild_id != GUILD_ID: return
         member = interaction.user
         await interaction.response.defer(ephemeral=True)
-        try: datetime.strptime(self.q3.value.strip(), "%d/%m/%Y")
+        
+        # Validasi format tanggal untuk Start dan End Date
+        try: 
+            datetime.strptime(self.q3.value.strip(), "%d/%m/%Y")
+            datetime.strptime(self.q4.value.strip(), "%d/%m/%Y")
         except ValueError:
             return await interaction.followup.send("Submission failed! Invalid date format. Use DD/MM/YYYY.", ephemeral=True)
+            
         log_channel = bot.get_channel(ID_CHANNEL_LOG_LOA)
         if log_channel:
             embed = discord.Embed(title="PENDING LOA REQUEST", description=f"Submission from {member.mention}", color=discord.Color(0x0d50b8))
             embed.add_field(name="1. Roblox Username", value=self.q1.value, inline=True)
             embed.add_field(name="2. Position / Department", value=self.q2.value, inline=True)
-            embed.add_field(name="3. LOA End Date", value=self.q3.value, inline=True)
-            embed.add_field(name="4. Reason & Notes", value=self.q4.value, inline=False)
-            embed.add_field(name="5. Reachable during leave?", value=self.q5.value, inline=False)
-            await log_channel.send(embed=embed, view=AdminApprovalView(member_id=member.id, data_form={"username": self.q1.value, "end_date": self.q3.value}))
+            embed.add_field(name="3. LOA Start Date", value=self.q3.value, inline=True)
+            embed.add_field(name="4. LOA End Date", value=self.q4.value, inline=True)
+            embed.add_field(name="5. Reason & Notes", value=self.q5.value, inline=False)
+            
+            # Data form yang dikirim ke Approval mencakup data baru
+            data_payload = {
+                "username": self.q1.value, 
+                "position": self.q2.value,
+                "start_date": self.q3.value,
+                "end_date": self.q4.value
+            }
+            await log_channel.send(embed=embed, view=AdminApprovalView(member_id=member.id, data_form=data_payload))
             await interaction.followup.send("Your LOA request has been securely submitted.", ephemeral=True)
 
-class LOAButtonView(discord.ui.View):
-    def __init__(self): super().__init__(timeout=None)
-    @discord.ui.button(label="Create LOA", style=discord.ButtonStyle.secondary, custom_id="button_create_loa_v14")
-    async def create_loa_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.guild_id != GUILD_ID: return  # Kunci Server Guard
-        if not loa_system_active: return await interaction.response.send_message("The LOA system has been temporarily disabled.", ephemeral=True)
-        await interaction.response.send_modal(LOAForm())
+# Update AdminApprovalView bagian tombol approve agar menyimpan semua parameter baru ke JSON
+class AdminApprovalView(discord.ui.View):
+    def __init__(self, member_id: int, data_form: dict):
+        super().__init__(timeout=None)
+        self.member_id = member_id
+        self.data_form = data_form
+        
+    @discord.ui.button(label="Accept Request", style=discord.ButtonStyle.success, custom_id="approve_loa_v14")
+    async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.guild_id != GUILD_ID: return
+        await interaction.response.defer()
+        guild = interaction.guild
+        member = guild.get_member(self.member_id)
+        
+        embed = interaction.message.embeds[0]
+        embed.color = discord.Color.green()
+        embed.title = "LOA REQUEST - APPROVED"
+
+        for child in self.children: child.disabled = True
+        await interaction.message.edit(embed=embed, view=self)
+        
+        if member:
+            role_loa = guild.get_role(ID_ROLE_LOA)
+            if role_loa:
+                try: await member.add_roles(role_loa)
+                except discord.Forbidden: pass
+            
+            loa_data = load_loa_data()
+            # Menyimpan data lengkap terstruktur sesuai format baru kamu
+            loa_data[str(self.member_id)] = {
+                "username": self.data_form["username"], 
+                "position": self.data_form["position"],
+                "start_date": self.data_form["start_date"],
+                "end_date": self.data_form["end_date"]
+            }
+            save_loa_data(loa_data)
+            
+            try:
+                embed_dm = discord.Embed(
+                    title="Your LOA Request Has Been Approved",
+                    description=(
+                        f"Hello {member.mention Muse},\n\n"
+                        f"Your Leave of Absence (LOA) request has been successfully approved.\n\n"
+                        f"**Duration:**\n"
+                        f"{self.data_form['start_date']} - {self.data_form['end_date']}\n\n"
+                        f"The Leave of Absence role has been assigned."
+                    ),
+                    color=discord.Color.green()
+                )
+                await member.send(embed=embed_dm)
+            except Exception: pass
+
+    @discord.ui.button(label="Reject Request", style=discord.ButtonStyle.danger, custom_id="reject_loa_v14")
+    async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.guild_id != GUILD_ID: return
+        for child in self.children: child.disabled = True
+        await interaction.response.send_modal(RejectReasonModal(member_id=self.member_id, interaction_admin=interaction, view_approval=self))
+
+# ====================================================================
+# Leave Of Absence List
+# ====================================================================
+
+@bot.command(name="list_loa")
+async def list_active_loa(ctx):
+    if ctx.guild is None or ctx.guild.id != GUILD_ID: return
+    
+    # Hak izin akses disamakan dengan command !setsession
+    user_roles = [role.id for role in ctx.author.roles]
+    has_permission = ctx.author.guild_permissions.administrator or any(role_id in user_roles for role_id in ALLOWED_ROLE_SESSION_IDS)
+    if not has_permission: return
+
+    loa_data = load_loa_data()
+    
+    if not loa_data:
+        embed_empty = discord.Embed(
+            title="Active LOA Members",
+            description="❌ Tidak ada staff yang sedang dalam masa Leave of Absence (LOA) saat ini.",
+            color=discord.Color.red()
+        )
+        return await ctx.send(embed=embed_empty)
+
+    embed_list = discord.Embed(
+        title="📋 Active LOA Database",
+        description="Daftar staff yang sedang mengambil masa cuti aktif saat ini:",
+        color=discord.Color(0x0d50b8)
+    )
+
+    for member_id_str, details in loa_data.items():
+        # Mengambil data baru yang tersimpan (jika data lama belum lengkap, beri nilai fallback '-')
+        pos = details.get("position", "-")
+        s_date = details.get("start_date", "-")
+        e_date = details.get("end_date", "-")
+        
+        # Format teks persis seperti yang kamu minta di dalam satu Field block
+        format_text = (
+            f"**Roblox Username:** {details['username']}\n"
+            f"**Position/Department:** {pos}\n"
+            f"**Start Date - End Date:** {s_date} - {e_date}"
+        )
+        
+        embed_list.add_field(
+            name="📋 Leave of Absence",
+            value=format_text,
+            inline=False
+        )
+
+    await ctx.send(embed=embed_list)
 
 # ====================================================================
 # FUNGSI CRON EKSEKUSI OTOMATIS (STRUKTUR METODE LAMA)
@@ -522,26 +635,31 @@ async def toggle_loa_system(ctx, status: str = None):
         loa_system_active = True
         await ctx.send("The Leave of Absence (LOA) system has been reactivated and is now available for use. Eligible members may proceed with submitting their LOA requests in accordance with the established procedures.")
 
-@bot.command()
+@bot.command(name="setup_loa")
 @commands.has_permissions(administrator=True)
 async def setup_loa(ctx):
     if ctx.guild is None or ctx.guild.id != GUILD_ID: return
+    
     embed = discord.Embed(
-        title="Leave of Absence (LOA) Portal", 
+        title="📝 Leave of Absence (LOA) Portal", 
         description=(
-            "Welcome to the Leave of Absence System.\n\n"
-            "This system is intended for members who require a temporary leave from their "
-            "duties and responsibilities. Please submit your request with a clear reason and an "
-            "accurate duration of absence.\n\n"
-            "All submissions will be reviewed by the President or Vice President. Requests "
-            "containing false information or any misuse of this system may result in disciplinary "
-            "action in accordance with applicable regulations.\n\n"
-            "The outcome of your LOA request will be sent to you via Direct Message (DM) "
-            "once it has been reviewed and approved by the President or Vice President.\n\n"
-            "Thank you for your cooperation and professionalism."
+            "**Welcome to the Leave of Absence System!**\n"
+            "Submit your leave request here for official recognition and documentation in Rise Country.\n\n"
+            "**Requirements:**\n"
+            "• Valid Roblox Username\n"
+            "• Current Position / Department\n"
+            "• Clear Start Date and End Date\n\n"
+            "**Note:** All submissions will be reviewed by the High Rank administration. "
+            "Requests containing false information or any misuse may result in disciplinary action.\n\n"
+            "*The outcome of your LOA request will be sent directly via DM once reviewed.*\n\n"
+            "**Create LOA**\n"
+            "Apply for a new Leave of Absence period."
         ), 
         color=discord.Color(0x0d50b8)
     )
+    # Menambahkan footer horizontal pemisah khas seperti di gambar referensi
+    embed.set_footer(text="⚙️ Rise Country Automation System")
+    
     await ctx.send(embed=embed, view=LOAButtonView())
 
 # ====================================================================
